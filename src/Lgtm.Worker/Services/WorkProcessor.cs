@@ -275,15 +275,19 @@ public class WorkProcessor : IWorkProcessor
                     break;
                 case "tool_use":
                     var toolName = block.GetProperty("name").GetString();
-                    if (toolName == "Bash" && block.TryGetProperty("input", out var input)
-                        && input.TryGetProperty("command", out var command))
+                    if (block.TryGetProperty("input", out var input))
                     {
-                        Console.WriteLine($"[Bash] {command.GetString()}");
+                        switch (toolName)
+                        {
+                            case "Bash" when input.TryGetProperty("command", out var command):
+                                Console.WriteLine($"[Bash] {command.GetString()}");
+                                continue;
+                            case "Edit" or "Read" when input.TryGetProperty("file_path", out var filePath):
+                                Console.WriteLine($"[{toolName}] {filePath.GetString()}");
+                                continue;
+                        }
                     }
-                    else
-                    {
-                        Console.WriteLine($"[Tool] {toolName}");
-                    }
+                    Console.WriteLine($"[Tool] {toolName}");
                     break;
             }
         }
