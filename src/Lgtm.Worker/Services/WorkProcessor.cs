@@ -25,6 +25,7 @@ public class WorkProcessor : IWorkProcessor
 
     public async Task ProcessAsync(CancellationToken cancellationToken)
     {
+        var startTime = DateTime.Now;
         var count = Interlocked.Increment(ref _executionCount);
         Console.WriteLine($"Starting execution {count}");
 
@@ -129,6 +130,9 @@ public class WorkProcessor : IWorkProcessor
                 // Suppress exceptions from finally block
             }
         }
+
+        var nextRunTime = startTime.AddMinutes(_options.IntervalMinutes);
+        Console.WriteLine($"\nNext check scheduled for: {nextRunTime:yyyy-MM-dd HH:mm:ss}");
     }
 
     private async Task<string?> EnsureRepoCheckedOutAsync(string owner, string repoName, int prNumber, CancellationToken cancellationToken)
