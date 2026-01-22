@@ -2,6 +2,9 @@ using Lgtm.Worker.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+// Disable framework logging (using Console.WriteLine instead)
+builder.Logging.ClearProviders();
+
 // Configure options
 builder.Services.Configure<WorkerOptions>(
     builder.Configuration.GetSection(WorkerOptions.SectionName));

@@ -1,26 +1,23 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Lgtm.Worker.Services;
 
 public class WorkProcessor : IWorkProcessor
 {
-    private readonly ILogger<WorkProcessor> _logger;
     private readonly IOptions<WorkerOptions> _options;
     private int _executionCount;
 
-    public WorkProcessor(ILogger<WorkProcessor> logger, IOptions<WorkerOptions> options)
+    public WorkProcessor(IOptions<WorkerOptions> options)
     {
-        _logger = logger;
         _options = options;
     }
 
     public async Task ProcessAsync(CancellationToken cancellationToken)
     {
         var count = Interlocked.Increment(ref _executionCount);
-        _logger.LogInformation("Starting weather fetch. Execution count: {Count}", count);
+        Console.WriteLine($"Starting weather fetch. Execution count: {count}");
 
         try
         {
@@ -28,7 +25,7 @@ public class WorkProcessor : IWorkProcessor
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to fetch weather from Claude");
+            Console.WriteLine($"Failed to fetch weather from Claude: {ex.Message}");
         }
     }
 
@@ -80,23 +77,18 @@ public class WorkProcessor : IWorkProcessor
 
             var type = root.GetProperty("type").GetString();
 
-            switch (type)
+            if (type == "assistant")
             {
-                case "assistant":
-                    ProcessAssistantMessage(root);
-                    break;
-                case "result":
-                    ProcessResultMessage(root);
-                    break;
+                ProcessAssistantMessage(root);
             }
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            _logger.LogWarning(ex, "Failed to parse stream event: {Json}", json);
+            // Ignore malformed JSON
         }
     }
 
-    private void ProcessAssistantMessage(JsonElement root)
+    private static void ProcessAssistantMessage(JsonElement root)
     {
         if (!root.TryGetProperty("message", out var message))
             return;
@@ -112,25 +104,18 @@ public class WorkProcessor : IWorkProcessor
             {
                 case "thinking":
                     var thinking = block.GetProperty("thinking").GetString();
-                    _logger.LogDebug("Thinking: {Thinking}", thinking);
+                    Console.WriteLine($"[Thinking] {thinking}");
                     break;
                 case "text":
                     var text = block.GetProperty("text").GetString();
-                    _logger.LogInformation("Claude: {Text}", text);
+                    Console.WriteLine(text);
                     break;
                 case "tool_use":
                     var toolName = block.GetProperty("name").GetString();
-                    _logger.LogInformation("Using tool: {Tool}", toolName);
+                    Console.WriteLine($"[Tool] {toolName}");
                     break;
             }
         }
     }
 
-    private void ProcessResultMessage(JsonElement root)
-    {
-        if (root.TryGetProperty("result", out var result))
-        {
-            _logger.LogInformation("Final result: {Result}", result.GetString());
-        }
-    }
 }
