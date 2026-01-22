@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Microsoft.Extensions.Options;
 
 namespace Lgtm.Worker.Services;
 
@@ -8,12 +7,12 @@ public class WorkProcessor : IWorkProcessor
 {
     private const string Prompt = "Get the current weather in Cambridge, UK and provide a brief summary.";
 
-    private readonly IOptions<WorkerOptions> _options;
+    private readonly List<RepositoryConfig> _repositories;
     private int _executionCount;
 
-    public WorkProcessor(IOptions<WorkerOptions> options)
+    public WorkProcessor(List<RepositoryConfig> repositories)
     {
-        _options = options;
+        _repositories = repositories;
     }
 
     public async Task ProcessAsync(CancellationToken cancellationToken)
@@ -21,14 +20,13 @@ public class WorkProcessor : IWorkProcessor
         var count = Interlocked.Increment(ref _executionCount);
         Console.WriteLine($"Starting execution {count}");
 
-        var repositories = _options.Value.Repositories;
-        if (repositories.Count == 0)
+        if (_repositories.Count == 0)
         {
             Console.WriteLine("No repositories configured.");
             return;
         }
 
-        foreach (var repo in repositories)
+        foreach (var repo in _repositories)
         {
             if (cancellationToken.IsCancellationRequested)
                 break;

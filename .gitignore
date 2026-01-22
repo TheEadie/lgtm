@@ -70,3 +70,6 @@ BenchmarkDotNet.Artifacts/
 # Publish profiles
 [Pp]ublish/
 !**/[Pp]ublish/wwwroot/
+
+# Local config
+lgtm-config.json
