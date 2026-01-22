@@ -4,7 +4,7 @@ using Lgtm.Worker.Services;
 if (args.Length == 0)
 {
     Console.WriteLine("Usage: Lgtm.Worker <config-file>");
-    Console.WriteLine("  config-file: Path to JSON file containing repository configuration");
+    Console.WriteLine("  config-file: Path to JSON file containing pull request URLs");
     return 1;
 }
 
@@ -15,14 +15,15 @@ if (!File.Exists(configPath))
     return 1;
 }
 
-List<RepositoryConfig> repositories;
+List<string> pullRequestUrls;
 try
 {
     var json = await File.ReadAllTextAsync(configPath);
-    repositories = JsonSerializer.Deserialize<List<RepositoryConfig>>(json, new JsonSerializerOptions
+    var config = JsonSerializer.Deserialize<LgtmConfig>(json, new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true
-    }) ?? [];
+    });
+    pullRequestUrls = config?.PullRequestUrls ?? [];
 }
 catch (JsonException ex)
 {
@@ -30,7 +31,7 @@ catch (JsonException ex)
     return 1;
 }
 
-Console.WriteLine($"Loaded {repositories.Count} repositories from {configPath}");
+Console.WriteLine($"Loaded {pullRequestUrls.Count} pull request(s) from {configPath}");
 
 var builder = Host.CreateApplicationBuilder(args.Skip(1).ToArray());
 
@@ -40,7 +41,7 @@ builder.Logging.ClearProviders();
 // Configure options
 builder.Services.Configure<WorkerOptions>(
     builder.Configuration.GetSection(WorkerOptions.SectionName));
-builder.Services.AddSingleton(repositories);
+builder.Services.AddSingleton(pullRequestUrls);
 
 // Register services
 builder.Services.AddSingleton<IWorkProcessor, WorkProcessor>();

@@ -1,6 +1,7 @@
 # LGTM - Automated PR Maintenance
 
 A .NET worker that monitors GitHub pull requests and uses Claude CLI to automatically:
+- Clone repositories and checkout PR branches
 - Resolve merge conflicts by rebasing on the target branch
 - Address new review comments and push fixes
 
@@ -12,24 +13,18 @@ A .NET worker that monitors GitHub pull requests and uses Claude CLI to automati
 
 ## Configuration
 
-Create a JSON config file with an array of repositories to monitor:
+Create a JSON config file with pull request URLs to monitor:
 
 ```json
-[
-    {
-        "Path": "~/code/my-project",
-        "PullRequestUrl": "https://github.com/owner/repo/pull/123"
-    },
-    {
-        "Path": "/absolute/path/to/another-project",
-        "PullRequestUrl": "https://github.com/owner/other-repo/pull/456"
-    }
-]
+{
+    "PullRequestUrls": [
+        "https://github.com/owner/repo/pull/123",
+        "https://github.com/owner/other-repo/pull/456"
+    ]
+}
 ```
 
-Each entry requires:
-- `Path`: Local path to the git repository (supports `~` for home directory)
-- `PullRequestUrl`: GitHub PR URL to monitor
+The tool will automatically clone repositories into a workspace directory (default: `~/lgtm`) and checkout the PR branch using `gh pr checkout`.
 
 ## Running
 
@@ -61,15 +56,19 @@ For each configured PR, the worker:
 
 ## Configuration Options
 
-The polling interval can be configured via `appsettings.json`:
+The polling interval and workspace directory can be configured via `appsettings.json`:
 
 ```json
 {
   "Worker": {
-    "IntervalMinutes": 10
+    "IntervalMinutes": 10,
+    "WorkspaceDirectory": "~/lgtm"
   }
 }
 ```
+
+- `IntervalMinutes`: How often to check PRs (default: 10 minutes)
+- `WorkspaceDirectory`: Where to clone repositories (default: `~/lgtm`, supports `~` for home directory)
 
 ## Safety
 

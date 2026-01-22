@@ -5,10 +5,10 @@ public class WorkerOptions
     public const string SectionName = "Worker";
 
     public int IntervalMinutes { get; set; } = 10;
+    public string WorkspaceDirectory { get; set; } = "~/lgtm";
 }
 
-public class RepositoryConfig
+public class LgtmConfig
 {
-    public string Path { get; set; } = string.Empty;
-    public string PullRequestUrl { get; set; } = string.Empty;
+    public List<string> PullRequestUrls { get; set; } = [];
 }

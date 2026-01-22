@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Options;
 
 namespace Lgtm.Worker.Services;
 
@@ -12,12 +13,14 @@ public class WorkProcessor : IWorkProcessor
         @"^https://github\.com/(?<owner>[^/]+)/(?<repo>[^/]+)/pull/(?<number>\d+)",
         RegexOptions.Compiled);
 
-    private readonly List<RepositoryConfig> _repositories;
+    private readonly List<string> _pullRequestUrls;
+    private readonly WorkerOptions _options;
     private int _executionCount;
 
-    public WorkProcessor(List<RepositoryConfig> repositories)
+    public WorkProcessor(List<string> pullRequestUrls, IOptions<WorkerOptions> options)
     {
-        _repositories = repositories;
+        _pullRequestUrls = pullRequestUrls;
+        _options = options.Value;
     }
 
     public async Task ProcessAsync(CancellationToken cancellationToken)
@@ -25,30 +28,40 @@ public class WorkProcessor : IWorkProcessor
         var count = Interlocked.Increment(ref _executionCount);
         Console.WriteLine($"Starting execution {count}");
 
-        if (_repositories.Count == 0)
+        if (_pullRequestUrls.Count == 0)
         {
-            Console.WriteLine("No repositories configured.");
+            Console.WriteLine("No pull requests configured.");
             return;
         }
 
-        foreach (var repo in _repositories)
+        foreach (var prUrl in _pullRequestUrls)
         {
             if (cancellationToken.IsCancellationRequested)
                 break;
 
-            Console.WriteLine($"\n--- Processing: {repo.Path} ---");
-            Console.WriteLine($"PR: {repo.PullRequestUrl}");
+            Console.WriteLine($"\n--- Processing: {prUrl} ---");
 
             try
             {
-                var prInfo = ParsePrUrl(repo.PullRequestUrl);
+                var prInfo = ParsePrUrl(prUrl);
                 if (prInfo is null)
                 {
-                    Console.WriteLine("Invalid or missing PR URL, skipping status check");
+                    Console.WriteLine("Invalid PR URL, skipping");
                     continue;
                 }
 
                 var (owner, repoName, prNumber) = prInfo.Value;
+
+                // Ensure repo is cloned and checked out to the PR branch
+                var repoPath = await EnsureRepoCheckedOutAsync(owner, repoName, prNumber, cancellationToken);
+                if (repoPath is null)
+                {
+                    Console.WriteLine("Failed to clone/checkout repository, skipping");
+                    continue;
+                }
+
+                Console.WriteLine($"Working in: {repoPath}");
+
                 var status = await GetPrStatusAsync(owner, repoName, prNumber, cancellationToken);
 
                 if (status is null)
@@ -76,7 +89,7 @@ public class WorkProcessor : IWorkProcessor
 
                     Console.WriteLine($"PR has conflicts, invoking Claude to rebase {status.HeadRefName} on {status.BaseRefName}");
                     var conflictPrompt = BuildConflictResolutionPrompt(status.HeadRefName, status.BaseRefName);
-                    await RunClaudeStreamingAsync(conflictPrompt, repo.Path, cancellationToken);
+                    await RunClaudeStreamingAsync(conflictPrompt, repoPath, cancellationToken);
                     continue;
                 }
 
@@ -98,13 +111,91 @@ public class WorkProcessor : IWorkProcessor
 
                 Console.WriteLine($"Found {newComments.Count} new review comment(s), invoking Claude to address them");
                 var reviewPrompt = BuildReviewResolutionPrompt(status.HeadRefName, newComments);
-                await RunClaudeStreamingAsync(reviewPrompt, repo.Path, cancellationToken);
+                await RunClaudeStreamingAsync(reviewPrompt, repoPath, cancellationToken);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to process {repo.Path}: {ex.Message}");
+                Console.WriteLine($"Failed to process {prUrl}: {ex.Message}");
             }
         }
+    }
+
+    private async Task<string?> EnsureRepoCheckedOutAsync(string owner, string repoName, int prNumber, CancellationToken cancellationToken)
+    {
+        var workspaceDir = ExpandPath(_options.WorkspaceDirectory);
+
+        // Create workspace directory if it doesn't exist
+        if (!Directory.Exists(workspaceDir))
+        {
+            Console.WriteLine($"Creating workspace directory: {workspaceDir}");
+            Directory.CreateDirectory(workspaceDir);
+        }
+
+        var repoPath = Path.Combine(workspaceDir, $"{owner}-{repoName}");
+
+        // If directory doesn't exist, clone the repo first
+        if (!Directory.Exists(repoPath))
+        {
+            Console.WriteLine($"Cloning repository {owner}/{repoName}...");
+
+            using var cloneProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "gh",
+                    Arguments = $"repo clone {owner}/{repoName} {repoPath}",
+                    WorkingDirectory = workspaceDir,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            cloneProcess.Start();
+            await cloneProcess.StandardOutput.ReadToEndAsync(cancellationToken);
+            var cloneError = await cloneProcess.StandardError.ReadToEndAsync(cancellationToken);
+            await cloneProcess.WaitForExitAsync(cancellationToken);
+
+            if (cloneProcess.ExitCode != 0)
+            {
+                Console.WriteLine($"Failed to clone repository: {cloneError}");
+                return null;
+            }
+
+            Console.WriteLine($"Repository cloned successfully");
+        }
+
+        // Checkout the PR branch
+        Console.WriteLine($"Checking out PR #{prNumber}...");
+
+        using var checkoutProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = $"pr checkout {prNumber}",
+                WorkingDirectory = repoPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        checkoutProcess.Start();
+        await checkoutProcess.StandardOutput.ReadToEndAsync(cancellationToken);
+        var checkoutError = await checkoutProcess.StandardError.ReadToEndAsync(cancellationToken);
+        await checkoutProcess.WaitForExitAsync(cancellationToken);
+
+        if (checkoutProcess.ExitCode != 0)
+        {
+            Console.WriteLine($"Failed to checkout PR: {checkoutError}");
+            return null;
+        }
+
+        Console.WriteLine($"Successfully checked out PR branch");
+        return repoPath;
     }
 
     private async Task RunClaudeStreamingAsync(string prompt, string workingDirectory, CancellationToken cancellationToken)
