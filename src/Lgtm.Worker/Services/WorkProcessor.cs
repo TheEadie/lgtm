@@ -105,7 +105,7 @@ public class WorkProcessor : IWorkProcessor
             StartInfo = new ProcessStartInfo
             {
                 FileName = "claude",
-                Arguments = """--allowedTools "Bash(git*)" --verbose --output-format stream-json -p -""",
+                Arguments = """--allowedTools "Bash(git*)" Edit Read --verbose --output-format stream-json -p -""",
                 WorkingDirectory = expandedPath,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
