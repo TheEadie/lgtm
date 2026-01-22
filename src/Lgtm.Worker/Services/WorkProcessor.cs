@@ -165,6 +165,36 @@ public class WorkProcessor : IWorkProcessor
 
             Console.WriteLine($"Repository cloned successfully");
         }
+        else
+        {
+            Console.WriteLine($"Reusing existing clone at {repoPath}");
+
+            // Fetch latest changes from remote
+            Console.WriteLine($"Fetching latest changes...");
+            using var fetchProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = "fetch --all --prune",
+                    WorkingDirectory = repoPath,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            fetchProcess.Start();
+            await fetchProcess.StandardOutput.ReadToEndAsync(cancellationToken);
+            await fetchProcess.StandardError.ReadToEndAsync(cancellationToken);
+            await fetchProcess.WaitForExitAsync(cancellationToken);
+
+            if (fetchProcess.ExitCode != 0)
+            {
+                Console.WriteLine($"Warning: Failed to fetch latest changes, continuing with existing state");
+            }
+        }
 
         // Checkout the PR branch
         Console.WriteLine($"Checking out PR #{prNumber}...");
