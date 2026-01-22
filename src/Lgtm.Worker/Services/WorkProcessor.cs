@@ -1,11 +1,16 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Lgtm.Worker.Services;
 
 public class WorkProcessor : IWorkProcessor
 {
-    private const string Prompt = "Get the current weather in Cambridge, UK and provide a brief summary.";
+    private static readonly HashSet<string> ProtectedBranches = ["main", "develop", "master"];
+
+    private static readonly Regex PrUrlRegex = new(
+        @"^https://github\.com/(?<owner>[^/]+)/(?<repo>[^/]+)/pull/(?<number>\d+)",
+        RegexOptions.Compiled);
 
     private readonly List<RepositoryConfig> _repositories;
     private int _executionCount;
@@ -36,7 +41,53 @@ public class WorkProcessor : IWorkProcessor
 
             try
             {
-                await RunClaudeStreamingAsync(Prompt, repo.Path, cancellationToken);
+                var prInfo = ParsePrUrl(repo.PullRequestUrl);
+                if (prInfo is null)
+                {
+                    Console.WriteLine("Invalid or missing PR URL, skipping status check");
+                    continue;
+                }
+
+                var (owner, repoName, prNumber) = prInfo.Value;
+                var status = await GetPrStatusAsync(owner, repoName, prNumber, cancellationToken);
+
+                if (status is null)
+                {
+                    Console.WriteLine("Could not retrieve PR status, skipping");
+                    continue;
+                }
+
+                Console.WriteLine($"PR State: {status.State}, Mergeable: {status.Mergeable}");
+                Console.WriteLine($"Branch: {status.HeadRefName} -> {status.BaseRefName}");
+
+                if (status.State == "MERGED")
+                {
+                    Console.WriteLine("PR already merged, skipping");
+                    continue;
+                }
+
+                if (status.Mergeable == "MERGEABLE")
+                {
+                    Console.WriteLine("PR has no conflicts, skipping");
+                    continue;
+                }
+
+                if (status.Mergeable == "CONFLICTING")
+                {
+                    if (IsProtectedBranch(status.HeadRefName))
+                    {
+                        Console.WriteLine($"ERROR: Cannot rebase protected branch '{status.HeadRefName}', skipping");
+                        continue;
+                    }
+
+                    Console.WriteLine($"PR has conflicts, invoking Claude to rebase {status.HeadRefName} on {status.BaseRefName}");
+                    var prompt = BuildConflictResolutionPrompt(status.HeadRefName, status.BaseRefName);
+                    await RunClaudeStreamingAsync(prompt, repo.Path, cancellationToken);
+                }
+                else
+                {
+                    Console.WriteLine($"Unknown mergeable state: {status.Mergeable}, skipping");
+                }
             }
             catch (Exception ex)
             {
@@ -85,6 +136,89 @@ public class WorkProcessor : IWorkProcessor
         {
             throw new InvalidOperationException($"Claude CLI exited with code {process.ExitCode}: {error}");
         }
+    }
+
+    private static (string owner, string repo, int prNumber)? ParsePrUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+
+        var match = PrUrlRegex.Match(url);
+        if (!match.Success)
+            return null;
+
+        var owner = match.Groups["owner"].Value;
+        var repo = match.Groups["repo"].Value;
+        var number = int.Parse(match.Groups["number"].Value);
+
+        return (owner, repo, number);
+    }
+
+    private static bool IsProtectedBranch(string branchName)
+    {
+        return ProtectedBranches.Contains(branchName.ToLowerInvariant());
+    }
+
+    private record PrStatus(string State, string Mergeable, string HeadRefName, string BaseRefName);
+
+    private static async Task<PrStatus?> GetPrStatusAsync(string owner, string repo, int prNumber, CancellationToken cancellationToken)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = $"pr view {prNumber} --repo {owner}/{repo} --json state,mergeable,headRefName,baseRefName",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+
+        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0)
+        {
+            Console.WriteLine($"Failed to get PR status: gh exited with code {process.ExitCode}");
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(output);
+            var root = doc.RootElement;
+
+            return new PrStatus(
+                root.GetProperty("state").GetString() ?? "",
+                root.GetProperty("mergeable").GetString() ?? "",
+                root.GetProperty("headRefName").GetString() ?? "",
+                root.GetProperty("baseRefName").GetString() ?? ""
+            );
+        }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"Failed to parse PR status: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string BuildConflictResolutionPrompt(string headRefName, string baseRefName)
+    {
+        return $"""
+            The PR branch '{headRefName}' has merge conflicts with '{baseRefName}'.
+            Please:
+            1. Run: git fetch origin
+            2. Run: git rebase origin/{baseRefName}
+            3. Resolve any merge conflicts that arise
+            4. After resolving, run: git rebase --continue
+            5. Once complete, run: git push --force-with-lease origin {headRefName}
+
+            IMPORTANT: You are working on branch '{headRefName}'. Never force push to main or develop.
+            """;
     }
 
     private void ProcessStreamEvent(string json)
