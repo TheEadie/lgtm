@@ -66,12 +66,6 @@ public class WorkProcessor : IWorkProcessor
                     continue;
                 }
 
-                if (status.Mergeable == "MERGEABLE")
-                {
-                    Console.WriteLine("PR has no conflicts, skipping");
-                    continue;
-                }
-
                 if (status.Mergeable == "CONFLICTING")
                 {
                     if (IsProtectedBranch(status.HeadRefName))
@@ -81,13 +75,30 @@ public class WorkProcessor : IWorkProcessor
                     }
 
                     Console.WriteLine($"PR has conflicts, invoking Claude to rebase {status.HeadRefName} on {status.BaseRefName}");
-                    var prompt = BuildConflictResolutionPrompt(status.HeadRefName, status.BaseRefName);
-                    await RunClaudeStreamingAsync(prompt, repo.Path, cancellationToken);
+                    var conflictPrompt = BuildConflictResolutionPrompt(status.HeadRefName, status.BaseRefName);
+                    await RunClaudeStreamingAsync(conflictPrompt, repo.Path, cancellationToken);
+                    continue;
                 }
-                else
+
+                if (status.Mergeable != "MERGEABLE" && status.Mergeable != "UNKNOWN")
                 {
                     Console.WriteLine($"Unknown mergeable state: {status.Mergeable}, skipping");
+                    continue;
                 }
+
+                // Check for new review comments since the last commit
+                Console.WriteLine($"Checking for new review comments since {status.LatestCommitDate?.ToString("u") ?? "unknown"}...");
+                var newComments = await GetNewReviewCommentsAsync(owner, repoName, prNumber, status.LatestCommitDate, cancellationToken);
+
+                if (newComments.Count == 0)
+                {
+                    Console.WriteLine("No new review comments to address");
+                    continue;
+                }
+
+                Console.WriteLine($"Found {newComments.Count} new review comment(s), invoking Claude to address them");
+                var reviewPrompt = BuildReviewResolutionPrompt(status.HeadRefName, newComments);
+                await RunClaudeStreamingAsync(reviewPrompt, repo.Path, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -159,7 +170,11 @@ public class WorkProcessor : IWorkProcessor
         return ProtectedBranches.Contains(branchName.ToLowerInvariant());
     }
 
-    private record PrStatus(string State, string Mergeable, string HeadRefName, string BaseRefName);
+    private record PrStatus(string State, string Mergeable, string HeadRefName, string BaseRefName, DateTimeOffset? LatestCommitDate);
+
+    private record PrReview(string Author, string State, string Body, DateTimeOffset SubmittedAt);
+
+    private record ReviewComment(string Author, string Path, int? Line, string Body, DateTimeOffset CreatedAt);
 
     private static async Task<PrStatus?> GetPrStatusAsync(string owner, string repo, int prNumber, CancellationToken cancellationToken)
     {
@@ -168,7 +183,7 @@ public class WorkProcessor : IWorkProcessor
             StartInfo = new ProcessStartInfo
             {
                 FileName = "gh",
-                Arguments = $"pr view {prNumber} --repo {owner}/{repo} --json state,mergeable,headRefName,baseRefName",
+                Arguments = $"pr view {prNumber} --repo {owner}/{repo} --json state,mergeable,headRefName,baseRefName,commits",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -192,11 +207,22 @@ public class WorkProcessor : IWorkProcessor
             using var doc = JsonDocument.Parse(output);
             var root = doc.RootElement;
 
+            DateTimeOffset? latestCommitDate = null;
+            if (root.TryGetProperty("commits", out var commits) && commits.GetArrayLength() > 0)
+            {
+                var lastCommit = commits[commits.GetArrayLength() - 1];
+                if (lastCommit.TryGetProperty("committedDate", out var dateElement))
+                {
+                    latestCommitDate = DateTimeOffset.Parse(dateElement.GetString()!);
+                }
+            }
+
             return new PrStatus(
                 root.GetProperty("state").GetString() ?? "",
                 root.GetProperty("mergeable").GetString() ?? "",
                 root.GetProperty("headRefName").GetString() ?? "",
-                root.GetProperty("baseRefName").GetString() ?? ""
+                root.GetProperty("baseRefName").GetString() ?? "",
+                latestCommitDate
             );
         }
         catch (JsonException ex)
@@ -204,6 +230,71 @@ public class WorkProcessor : IWorkProcessor
             Console.WriteLine($"Failed to parse PR status: {ex.Message}");
             return null;
         }
+    }
+
+    private static async Task<List<ReviewComment>> GetNewReviewCommentsAsync(
+        string owner, string repo, int prNumber, DateTimeOffset? sinceDate, CancellationToken cancellationToken)
+    {
+        var comments = new List<ReviewComment>();
+
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = $"api repos/{owner}/{repo}/pulls/{prNumber}/comments --paginate",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+
+        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0)
+        {
+            Console.WriteLine($"Failed to get PR comments: gh exited with code {process.ExitCode}");
+            return comments;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(output);
+            foreach (var comment in doc.RootElement.EnumerateArray())
+            {
+                var createdAt = DateTimeOffset.Parse(comment.GetProperty("created_at").GetString()!);
+
+                // Skip comments older than the latest commit
+                if (sinceDate.HasValue && createdAt <= sinceDate.Value)
+                    continue;
+
+                var author = comment.TryGetProperty("user", out var user)
+                    ? user.GetProperty("login").GetString() ?? "unknown"
+                    : "unknown";
+
+                var path = comment.TryGetProperty("path", out var pathElement)
+                    ? pathElement.GetString() ?? ""
+                    : "";
+
+                int? line = comment.TryGetProperty("line", out var lineElement) && lineElement.ValueKind == JsonValueKind.Number
+                    ? lineElement.GetInt32()
+                    : null;
+
+                var body = comment.GetProperty("body").GetString() ?? "";
+
+                comments.Add(new ReviewComment(author, path, line, body, createdAt));
+            }
+        }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"Failed to parse PR comments: {ex.Message}");
+        }
+
+        return comments;
     }
 
     private static string BuildConflictResolutionPrompt(string headRefName, string baseRefName)
@@ -218,6 +309,34 @@ public class WorkProcessor : IWorkProcessor
             5. Once complete, run: git push --force-with-lease origin {headRefName}
 
             IMPORTANT: You are working on branch '{headRefName}'. Never force push to main or develop.
+            """;
+    }
+
+    private static string BuildReviewResolutionPrompt(string headRefName, List<ReviewComment> comments)
+    {
+        var commentDescriptions = string.Join("\n\n", comments.Select(c =>
+        {
+            var location = string.IsNullOrEmpty(c.Path)
+                ? "General comment"
+                : c.Line.HasValue
+                    ? $"File: {c.Path}, Line: {c.Line}"
+                    : $"File: {c.Path}";
+            return $"[{c.Author}] {location}\n{c.Body}";
+        }));
+
+        return $"""
+            There are new review comments on the PR for branch '{headRefName}' that need to be addressed.
+
+            Review comments:
+            {commentDescriptions}
+
+            Please:
+            1. Read and understand each review comment
+            2. Make the necessary code changes to address the feedback
+            3. Commit your changes with a descriptive message referencing the review feedback
+            4. Push your changes: git push origin {headRefName}
+
+            IMPORTANT: You are working on branch '{headRefName}'. Do not force push - use a regular push.
             """;
     }
 
