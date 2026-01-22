@@ -43,79 +43,90 @@ public class WorkProcessor : IWorkProcessor
 
             try
             {
-                var prInfo = ParsePrUrl(prUrl);
-                if (prInfo is null)
+                try
                 {
-                    Console.WriteLine("Invalid PR URL, skipping");
-                    continue;
-                }
-
-                var (owner, repoName, prNumber) = prInfo.Value;
-
-                // Ensure repo is cloned and checked out to the PR branch
-                var repoPath = await EnsureRepoCheckedOutAsync(owner, repoName, prNumber, cancellationToken);
-                if (repoPath is null)
-                {
-                    Console.WriteLine("Failed to clone/checkout repository, skipping");
-                    continue;
-                }
-
-                Console.WriteLine($"Working in: {repoPath}");
-
-                var status = await GetPrStatusAsync(owner, repoName, prNumber, cancellationToken);
-
-                if (status is null)
-                {
-                    Console.WriteLine("Could not retrieve PR status, skipping");
-                    continue;
-                }
-
-                Console.WriteLine($"PR State: {status.State}, Mergeable: {status.Mergeable}");
-                Console.WriteLine($"Branch: {status.HeadRefName} -> {status.BaseRefName}");
-
-                if (status.State == "MERGED")
-                {
-                    Console.WriteLine("PR already merged, skipping");
-                    continue;
-                }
-
-                if (status.Mergeable == "CONFLICTING")
-                {
-                    if (IsProtectedBranch(status.HeadRefName))
+                    var prInfo = ParsePrUrl(prUrl);
+                    if (prInfo is null)
                     {
-                        Console.WriteLine($"ERROR: Cannot rebase protected branch '{status.HeadRefName}', skipping");
+                        Console.WriteLine("Invalid PR URL, skipping");
                         continue;
                     }
 
-                    Console.WriteLine($"PR has conflicts, invoking Claude to rebase {status.HeadRefName} on {status.BaseRefName}");
-                    var conflictPrompt = BuildConflictResolutionPrompt(status.HeadRefName, status.BaseRefName);
-                    await RunClaudeStreamingAsync(conflictPrompt, repoPath, cancellationToken);
-                    continue;
-                }
+                    var (owner, repoName, prNumber) = prInfo.Value;
 
-                if (status.Mergeable != "MERGEABLE" && status.Mergeable != "UNKNOWN")
+                    // Ensure repo is cloned and checked out to the PR branch
+                    var repoPath = await EnsureRepoCheckedOutAsync(owner, repoName, prNumber, cancellationToken);
+                    if (repoPath is null)
+                    {
+                        Console.WriteLine("Failed to clone/checkout repository, skipping");
+                        continue;
+                    }
+
+                    Console.WriteLine($"Working in: {repoPath}");
+
+                    var status = await GetPrStatusAsync(owner, repoName, prNumber, cancellationToken);
+
+                    if (status is null)
+                    {
+                        Console.WriteLine("Could not retrieve PR status, skipping");
+                        continue;
+                    }
+
+                    Console.WriteLine($"PR State: {status.State}, Mergeable: {status.Mergeable}");
+                    Console.WriteLine($"Branch: {status.HeadRefName} -> {status.BaseRefName}");
+
+                    if (status.State == "MERGED")
+                    {
+                        Console.WriteLine("PR already merged, skipping");
+                        continue;
+                    }
+
+                    if (status.Mergeable == "CONFLICTING")
+                    {
+                        if (IsProtectedBranch(status.HeadRefName))
+                        {
+                            Console.WriteLine($"ERROR: Cannot rebase protected branch '{status.HeadRefName}', skipping");
+                            continue;
+                        }
+
+                        Console.WriteLine($"PR has conflicts, invoking Claude to rebase {status.HeadRefName} on {status.BaseRefName}");
+                        var conflictPrompt = BuildConflictResolutionPrompt(status.HeadRefName, status.BaseRefName);
+                        await RunClaudeStreamingAsync(conflictPrompt, repoPath, cancellationToken);
+                        continue;
+                    }
+
+                    if (status.Mergeable != "MERGEABLE" && status.Mergeable != "UNKNOWN")
+                    {
+                        Console.WriteLine($"Unknown mergeable state: {status.Mergeable}, skipping");
+                        continue;
+                    }
+
+                    // Check for new review comments since the last commit
+                    Console.WriteLine($"Checking for new review comments since {status.LatestCommitDate?.ToString("u") ?? "unknown"}...");
+                    var newComments = await GetNewReviewCommentsAsync(owner, repoName, prNumber, status.LatestCommitDate, cancellationToken);
+
+                    if (newComments.Count == 0)
+                    {
+                        Console.WriteLine("No new review comments to address");
+                        continue;
+                    }
+
+                    Console.WriteLine($"Found {newComments.Count} new review comment(s), invoking Claude to address them");
+                    var reviewPrompt = BuildReviewResolutionPrompt(status.HeadRefName, newComments);
+                    await RunClaudeStreamingAsync(reviewPrompt, repoPath, cancellationToken);
+                }
+                catch (Exception ex)
                 {
-                    Console.WriteLine($"Unknown mergeable state: {status.Mergeable}, skipping");
-                    continue;
+                    Console.WriteLine($"Failed to process {prUrl}: {ex.Message}");
                 }
-
-                // Check for new review comments since the last commit
-                Console.WriteLine($"Checking for new review comments since {status.LatestCommitDate?.ToString("u") ?? "unknown"}...");
-                var newComments = await GetNewReviewCommentsAsync(owner, repoName, prNumber, status.LatestCommitDate, cancellationToken);
-
-                if (newComments.Count == 0)
+                finally
                 {
-                    Console.WriteLine("No new review comments to address");
-                    continue;
+                    Console.WriteLine(new string('-', 60) + "\n");
                 }
-
-                Console.WriteLine($"Found {newComments.Count} new review comment(s), invoking Claude to address them");
-                var reviewPrompt = BuildReviewResolutionPrompt(status.HeadRefName, newComments);
-                await RunClaudeStreamingAsync(reviewPrompt, repoPath, cancellationToken);
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"Failed to process {prUrl}: {ex.Message}");
+                // Suppress exceptions from finally block
             }
         }
     }
