@@ -6,6 +6,8 @@ namespace Lgtm.Worker.Services;
 
 public class WorkProcessor : IWorkProcessor
 {
+    private const string Prompt = "Get the current weather in Cambridge, UK and provide a brief summary.";
+
     private readonly IOptions<WorkerOptions> _options;
     private int _executionCount;
 
@@ -17,26 +19,43 @@ public class WorkProcessor : IWorkProcessor
     public async Task ProcessAsync(CancellationToken cancellationToken)
     {
         var count = Interlocked.Increment(ref _executionCount);
-        Console.WriteLine($"Starting weather fetch. Execution count: {count}");
+        Console.WriteLine($"Starting execution {count}");
 
-        try
+        var repositories = _options.Value.Repositories;
+        if (repositories.Count == 0)
         {
-            await RunClaudeStreamingAsync(_options.Value.WeatherPrompt, cancellationToken);
+            Console.WriteLine("No repositories configured.");
+            return;
         }
-        catch (Exception ex)
+
+        foreach (var repo in repositories)
         {
-            Console.WriteLine($"Failed to fetch weather from Claude: {ex.Message}");
+            if (cancellationToken.IsCancellationRequested)
+                break;
+
+            Console.WriteLine($"\n--- Processing: {repo.Path} ---");
+            Console.WriteLine($"PR: {repo.PullRequestUrl}");
+
+            try
+            {
+                await RunClaudeStreamingAsync(Prompt, repo.Path, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to process {repo.Path}: {ex.Message}");
+            }
         }
     }
 
-    private async Task RunClaudeStreamingAsync(string prompt, CancellationToken cancellationToken)
+    private async Task RunClaudeStreamingAsync(string prompt, string workingDirectory, CancellationToken cancellationToken)
     {
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = "claude",
-                Arguments = "--verbose --output-format stream-json --allowedTools WebSearch,WebFetch -p -",
+                Arguments = "--verbose --output-format stream-json -p -",
+                WorkingDirectory = workingDirectory,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
