@@ -1,17 +1,18 @@
 using System.Text.Json;
 using Lgtm.Worker.Services;
 
-if (args.Length == 0)
-{
-    Console.WriteLine("Usage: Lgtm.Worker <config-file>");
-    Console.WriteLine("  config-file: Path to JSON file containing pull request URLs");
-    return 1;
-}
+var configPath = args.Length > 0
+    ? args[0]
+    : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "lgtm", "config.json");
 
-var configPath = args[0];
 if (!File.Exists(configPath))
 {
     Console.WriteLine($"Config file not found: {configPath}");
+    if (args.Length == 0)
+    {
+        Console.WriteLine("Usage: Lgtm.Worker [config-file]");
+        Console.WriteLine("  config-file: Path to JSON file containing pull request URLs (default: ~/lgtm/config.json)");
+    }
     return 1;
 }
 

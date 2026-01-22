@@ -13,7 +13,7 @@ A .NET worker that monitors GitHub pull requests and uses Claude CLI to automati
 
 ## Configuration
 
-Create a JSON config file with pull request URLs to monitor:
+Create a JSON config file with pull request URLs to monitor. By default, the tool looks for `~/lgtm/config.json`:
 
 ```json
 {
@@ -29,11 +29,17 @@ The tool will automatically clone repositories into a workspace directory (defau
 ## Running
 
 ```bash
-dotnet run --project src/Lgtm.Worker <config-file>
+dotnet run --project src/Lgtm.Worker [config-file]
 ```
 
-Example:
+If no config file is specified, it defaults to `~/lgtm/config.json`.
+
+Examples:
 ```bash
+# Use default config file (~/lgtm/config.json)
+dotnet run --project src/Lgtm.Worker
+
+# Use a custom config file
 dotnet run --project src/Lgtm.Worker ./my-config.json
 ```
 
