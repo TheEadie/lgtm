@@ -47,13 +47,15 @@ public class WorkProcessor : IWorkProcessor
 
     private async Task RunClaudeStreamingAsync(string prompt, string workingDirectory, CancellationToken cancellationToken)
     {
+        var expandedPath = ExpandPath(workingDirectory);
+
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = "claude",
                 Arguments = "--verbose --output-format stream-json -p -",
-                WorkingDirectory = workingDirectory,
+                WorkingDirectory = expandedPath,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -103,6 +105,16 @@ public class WorkProcessor : IWorkProcessor
         {
             // Ignore malformed JSON
         }
+    }
+
+    private static string ExpandPath(string path)
+    {
+        if (path.StartsWith('~'))
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return Path.Combine(home, path[1..].TrimStart('/'));
+        }
+        return path;
     }
 
     private static void ProcessAssistantMessage(JsonElement root)
