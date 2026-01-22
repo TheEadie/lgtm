@@ -60,9 +60,14 @@ public class ClaudeInteractor : IClaudeInteractor
 
             var type = root.GetProperty("type").GetString();
 
-            if (type == "assistant")
+            switch (type)
             {
-                ProcessAssistantMessage(root);
+                case "assistant":
+                    ProcessAssistantMessage(root);
+                    break;
+                case "tool_result":
+                    ProcessToolResult(root);
+                    break;
             }
         }
         catch (JsonException)
@@ -110,6 +115,44 @@ public class ClaudeInteractor : IClaudeInteractor
                     Console.WriteLine($"[Tool] {toolName}");
                     break;
             }
+        }
+    }
+
+    private static void ProcessToolResult(JsonElement root)
+    {
+        if (!root.TryGetProperty("tool_result", out var toolResult))
+            return;
+
+        // Get tool name if available
+        var toolName = toolResult.TryGetProperty("tool_name", out var nameElement)
+            ? nameElement.GetString()
+            : "Tool";
+
+        // Get the result content
+        if (!toolResult.TryGetProperty("content", out var content))
+            return;
+
+        foreach (var block in content.EnumerateArray())
+        {
+            var blockType = block.GetProperty("type").GetString();
+
+            switch (blockType)
+            {
+                case "text":
+                    var text = block.GetProperty("text").GetString();
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        Console.WriteLine($"[Result] {text}");
+                    }
+                    break;
+            }
+        }
+
+        // Check if tool execution had an error
+        if (toolResult.TryGetProperty("is_error", out var isErrorElement) &&
+            isErrorElement.GetBoolean())
+        {
+            Console.WriteLine($"[Error] {toolName} execution failed");
         }
     }
 }
