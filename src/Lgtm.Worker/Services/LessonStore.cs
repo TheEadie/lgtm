@@ -9,7 +9,7 @@ public class LessonStore : ILessonStore
     private readonly IGitHubClient _gitHubClient;
     private readonly ILessonExtractor _lessonExtractor;
     private const string LessonsBaseDir = "~/lgtm/lessons";
-    private const int HistoricPrLimit = 50;
+    private const int HistoricPrLimit = 10;
 
     public LessonStore(IClaudeInteractor claudeInteractor, IGitHubClient gitHubClient, ILessonExtractor lessonExtractor)
     {
