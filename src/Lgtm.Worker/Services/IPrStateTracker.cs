@@ -62,4 +62,17 @@ public interface IPrStateTracker
     /// <param name="fingerprint">The state fingerprint at the time of resolution.</param>
     /// <param name="lastAddressedCommentId">The ID of the last comment that was addressed.</param>
     void RecordReviewResolution(string prUrl, PrStateFingerprint fingerprint, long lastAddressedCommentId);
+
+    /// <summary>
+    /// Checks if this is the first time we're seeing this PR as merged.
+    /// </summary>
+    /// <param name="prUrl">The PR URL.</param>
+    /// <returns>True if the PR has not been seen as merged before.</returns>
+    bool IsFirstSeenAsMerged(string prUrl);
+
+    /// <summary>
+    /// Records that a PR has been seen as merged.
+    /// </summary>
+    /// <param name="prUrl">The PR URL.</param>
+    void RecordMerge(string prUrl);
 }

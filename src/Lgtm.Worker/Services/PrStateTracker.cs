@@ -156,7 +156,8 @@ public class PrStateTracker : IPrStateTracker
             fingerprint,
             existing?.LastReviewResolutionState,
             existing?.LastAddressedCommentId,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            existing?.SeenAsMergedAt);
 
         _store.States[prUrl] = updated;
     }
@@ -170,6 +171,31 @@ public class PrStateTracker : IPrStateTracker
             existing?.LastConflictResolutionState,
             fingerprint,
             lastAddressedCommentId,
+            DateTimeOffset.UtcNow,
+            existing?.SeenAsMergedAt);
+
+        _store.States[prUrl] = updated;
+    }
+
+    /// <inheritdoc/>
+    public bool IsFirstSeenAsMerged(string prUrl)
+    {
+        if (_store.States.TryGetValue(prUrl, out var state))
+            return state.SeenAsMergedAt is null;
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public void RecordMerge(string prUrl)
+    {
+        var existing = _store.States.GetValueOrDefault(prUrl);
+        var updated = new ProcessedPrState(
+            prUrl,
+            existing?.LastConflictResolutionState,
+            existing?.LastReviewResolutionState,
+            existing?.LastAddressedCommentId,
+            existing?.LastProcessedAt,
             DateTimeOffset.UtcNow);
 
         _store.States[prUrl] = updated;

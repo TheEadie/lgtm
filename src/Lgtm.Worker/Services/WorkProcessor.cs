@@ -80,7 +80,16 @@ public class WorkProcessor : IWorkProcessor
 
                     if (status.State == "MERGED")
                     {
-                        Console.WriteLine("PR already merged, skipping");
+                        if (_stateTracker.IsFirstSeenAsMerged(prUrl))
+                        {
+                            Console.WriteLine("PR has been merged!");
+                            _stateTracker.RecordMerge(prUrl);
+                            stateModified = true;
+                        }
+                        else
+                        {
+                            Console.WriteLine("PR already merged, skipping");
+                        }
                         continue;
                     }
 

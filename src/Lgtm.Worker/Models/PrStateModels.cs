@@ -24,12 +24,14 @@ public record PrStateFingerprint(
 /// <param name="LastReviewResolutionState">State when reviews were last addressed, if ever.</param>
 /// <param name="LastAddressedCommentId">The ID of the last review comment that was addressed.</param>
 /// <param name="LastProcessedAt">When this PR was last processed for any reason.</param>
+/// <param name="SeenAsMergedAt">When the PR was first observed as merged, if ever.</param>
 public record ProcessedPrState(
     string PrUrl,
     PrStateFingerprint? LastConflictResolutionState,
     PrStateFingerprint? LastReviewResolutionState,
     long? LastAddressedCommentId,
-    DateTimeOffset? LastProcessedAt);
+    DateTimeOffset? LastProcessedAt,
+    DateTimeOffset? SeenAsMergedAt);
 
 /// <summary>
 /// Root object for the persisted state file.
