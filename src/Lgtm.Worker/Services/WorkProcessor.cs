@@ -52,6 +52,9 @@ public class WorkProcessor : IWorkProcessor
         await _stateTracker.LoadStateAsync(cancellationToken);
         var stateModified = false;
 
+        // Initialize lessons for configured repositories (if needed)
+        await InitializeLessonsForConfiguredReposAsync(cancellationToken);
+
         // Resolve PR URLs dynamically each cycle to discover new PRs
         var pullRequestUrls = await _prUrlResolver.GetPrUrlsAsync(cancellationToken);
 
@@ -82,19 +85,6 @@ public class WorkProcessor : IWorkProcessor
                     }
 
                     var (owner, repoName, prNumber) = prInfo;
-
-                    // Initialize lessons from history if this is the first time seeing this repo
-                    var repoKey = $"{owner}/{repoName}";
-                    if (!_reposCheckedForLessons.Contains(repoKey))
-                    {
-                        _reposCheckedForLessons.Add(repoKey);
-                        var existingLessons = await _lessonStore.GetLessonsAsync(owner, repoName);
-                        if (existingLessons is null)
-                        {
-                            Console.WriteLine($"No lessons file found for {repoKey}, initializing from PR history...");
-                            await _lessonStore.InitializeLessonsFromHistoryAsync(owner, repoName, _config.GitHubUsername, cancellationToken);
-                        }
-                    }
 
                     // Get PR status first (uses GitHub API, no checkout needed)
                     var status = await _gitHubClient.GetPrStatusAsync(owner, repoName, prNumber, cancellationToken);
@@ -264,5 +254,29 @@ public class WorkProcessor : IWorkProcessor
 
         var nextRunTime = startTime.AddMinutes(_options.IntervalMinutes);
         Console.WriteLine($"\nNext check scheduled for: {nextRunTime:yyyy-MM-dd HH:mm:ss}");
+    }
+
+    private async Task InitializeLessonsForConfiguredReposAsync(CancellationToken cancellationToken)
+    {
+        foreach (var repoUrl in _config.RepositoryUrls)
+        {
+            var parsed = PathUtilities.ParseRepoUrl(repoUrl);
+            if (parsed is null)
+                continue;
+
+            var (owner, repo) = parsed.Value;
+            var repoKey = $"{owner}/{repo}";
+
+            if (_reposCheckedForLessons.Contains(repoKey))
+                continue;
+
+            _reposCheckedForLessons.Add(repoKey);
+            var existingLessons = await _lessonStore.GetLessonsAsync(owner, repo);
+            if (existingLessons is null)
+            {
+                Console.WriteLine($"No lessons file found for {repoKey}, initializing from PR history...");
+                await _lessonStore.InitializeLessonsFromHistoryAsync(owner, repo, _config.GitHubUsername, cancellationToken);
+            }
+        }
     }
 }

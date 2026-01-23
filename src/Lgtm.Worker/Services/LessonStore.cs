@@ -1,14 +1,14 @@
 namespace Lgtm.Worker.Services;
 
 /// <summary>
-/// Manages per-repository lessons stored in ~/.lgtm/lessons/{owner}/{repo}.md
+/// Manages per-repository lessons stored in ~/lgtm/lessons/{owner}/{repo}.md
 /// </summary>
 public class LessonStore : ILessonStore
 {
     private readonly IClaudeInteractor _claudeInteractor;
     private readonly IGitHubClient _gitHubClient;
     private readonly ILessonExtractor _lessonExtractor;
-    private const string LessonsBaseDir = "~/.lgtm/lessons";
+    private const string LessonsBaseDir = "~/lgtm/lessons";
     private const int HistoricPrLimit = 50;
 
     public LessonStore(IClaudeInteractor claudeInteractor, IGitHubClient gitHubClient, ILessonExtractor lessonExtractor)
@@ -148,7 +148,7 @@ public class LessonStore : ILessonStore
                 break;
 
             prsProcessed++;
-            Console.Write($"\rProcessing PR {prsProcessed}/{prs.Count}: #{pr.Number} - {pr.Title[..Math.Min(40, pr.Title.Length)]}...");
+            Console.Write($"\rProcessing PR {prsProcessed}/{prs.Count}: #{pr.Number}...");
 
             var comments = await _gitHubClient.GetAllReviewCommentsAsync(owner, repo, pr.Number, cancellationToken);
 

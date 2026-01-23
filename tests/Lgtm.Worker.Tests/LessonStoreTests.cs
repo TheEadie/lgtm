@@ -54,7 +54,7 @@ public class LessonStoreTests : IDisposable
     public async Task GetLessonsAsync_ReturnsContent_WhenFileExists()
     {
         // Arrange
-        var lessonsDir = Path.Combine(_tempDir, ".lgtm", "lessons", "owner");
+        var lessonsDir = Path.Combine(_tempDir, "lgtm", "lessons", "owner");
         Directory.CreateDirectory(lessonsDir);
         var filePath = Path.Combine(lessonsDir, "repo.md");
         var expectedContent = "# Lessons\n\n- Use async/await";
@@ -73,7 +73,7 @@ public class LessonStoreTests : IDisposable
     public async Task GetLessonsAsync_ReturnsNull_WhenFileIsEmpty()
     {
         // Arrange
-        var lessonsDir = Path.Combine(_tempDir, ".lgtm", "lessons", "owner");
+        var lessonsDir = Path.Combine(_tempDir, "lgtm", "lessons", "owner");
         Directory.CreateDirectory(lessonsDir);
         var filePath = Path.Combine(lessonsDir, "repo.md");
         await File.WriteAllTextAsync(filePath, "   ");
@@ -99,7 +99,7 @@ public class LessonStoreTests : IDisposable
         await sut.SaveLessonAsync("owner", "repo", "Test lesson", CancellationToken.None);
 
         // Assert
-        var filePath = Path.Combine(_tempDir, ".lgtm", "lessons", "owner", "repo.md");
+        var filePath = Path.Combine(_tempDir, "lgtm", "lessons", "owner", "repo.md");
         Assert.True(File.Exists(filePath));
     }
 
@@ -127,7 +127,7 @@ public class LessonStoreTests : IDisposable
     public async Task SaveLessonAsync_CallsClaudeToConsolidate_WhenExistingLessons()
     {
         // Arrange
-        var lessonsDir = Path.Combine(_tempDir, ".lgtm", "lessons", "owner");
+        var lessonsDir = Path.Combine(_tempDir, "lgtm", "lessons", "owner");
         Directory.CreateDirectory(lessonsDir);
         var filePath = Path.Combine(lessonsDir, "repo.md");
         var existingContent = "# Lessons for owner/repo\n\n## Code Style\n\n- Existing lesson";
@@ -163,7 +163,7 @@ public class LessonStoreTests : IDisposable
         await sut.SaveLessonAsync("owner", "repo", "Test lesson", CancellationToken.None);
 
         // Assert
-        var filePath = Path.Combine(_tempDir, ".lgtm", "lessons", "owner", "repo.md");
+        var filePath = Path.Combine(_tempDir, "lgtm", "lessons", "owner", "repo.md");
         var actualContent = await File.ReadAllTextAsync(filePath);
         Assert.Equal(expectedContent, actualContent);
     }
@@ -180,7 +180,7 @@ public class LessonStoreTests : IDisposable
         await sut.SaveLessonAsync("owner", "repo", "Test lesson", CancellationToken.None);
 
         // Assert
-        var filePath = Path.Combine(_tempDir, ".lgtm", "lessons", "owner", "repo.md");
+        var filePath = Path.Combine(_tempDir, "lgtm", "lessons", "owner", "repo.md");
         var content = await File.ReadAllTextAsync(filePath);
         Assert.Contains("# Lessons for owner/repo", content);
         Assert.Contains("## General", content);
@@ -191,7 +191,7 @@ public class LessonStoreTests : IDisposable
     public async Task SaveLessonAsync_KeepsExistingContent_WhenConsolidationFails()
     {
         // Arrange
-        var lessonsDir = Path.Combine(_tempDir, ".lgtm", "lessons", "owner");
+        var lessonsDir = Path.Combine(_tempDir, "lgtm", "lessons", "owner");
         Directory.CreateDirectory(lessonsDir);
         var filePath = Path.Combine(lessonsDir, "repo.md");
         var existingContent = "# Lessons for owner/repo\n\n## Code Style\n\n- Existing lesson";
