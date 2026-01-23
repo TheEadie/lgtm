@@ -8,6 +8,7 @@ public class WorkProcessor : IWorkProcessor
     private readonly IGitHubClient _gitHubClient;
     private readonly IClaudeInteractor _claudeInteractor;
     private readonly IResolutionPromptBuilder _promptBuilder;
+    private readonly IPrStateTracker _stateTracker;
     private readonly List<string> _pullRequestUrls;
     private readonly WorkerOptions _options;
     private int _executionCount;
@@ -16,12 +17,14 @@ public class WorkProcessor : IWorkProcessor
         IGitHubClient gitHubClient,
         IClaudeInteractor claudeInteractor,
         IResolutionPromptBuilder promptBuilder,
+        IPrStateTracker stateTracker,
         List<string> pullRequestUrls,
         IOptions<WorkerOptions> options)
     {
         _gitHubClient = gitHubClient;
         _claudeInteractor = claudeInteractor;
         _promptBuilder = promptBuilder;
+        _stateTracker = stateTracker;
         _pullRequestUrls = pullRequestUrls;
         _options = options.Value;
     }
@@ -37,6 +40,10 @@ public class WorkProcessor : IWorkProcessor
             Console.WriteLine("No pull requests configured.");
             return;
         }
+
+        // Load persisted state
+        await _stateTracker.LoadStateAsync(cancellationToken);
+        var stateModified = false;
 
         foreach (var prUrl in _pullRequestUrls)
         {
@@ -69,6 +76,7 @@ public class WorkProcessor : IWorkProcessor
 
                     Console.WriteLine($"PR State: {status.State}, Mergeable: {status.Mergeable}");
                     Console.WriteLine($"Branch: {status.HeadRefName} -> {status.BaseRefName}");
+                    Console.WriteLine($"Head commit: {status.HeadCommitSha[..Math.Min(7, status.HeadCommitSha.Length)]}");
 
                     if (status.State == "MERGED")
                     {
@@ -82,8 +90,16 @@ public class WorkProcessor : IWorkProcessor
                         continue;
                     }
 
-                    // Determine if there's work to do before checking out the repo
+                    // Get the latest comment ID for fingerprinting
+                    var latestCommentId = await _gitHubClient.GetLatestCommentIdAsync(owner, repoName, prNumber, cancellationToken);
+
+                    // Build current state fingerprint
+                    var fingerprint = _stateTracker.GetCurrentFingerprint(prUrl, status, latestCommentId);
+
+                    // Determine if there's work to do
                     bool hasConflicts = status.Mergeable == "CONFLICTING";
+                    bool shouldResolveConflicts = hasConflicts && _stateTracker.ShouldResolveConflicts(prUrl, fingerprint);
+                    bool shouldAddressReviews = false;
                     List<ReviewComment>? newComments = null;
 
                     if (!hasConflicts)
@@ -94,19 +110,38 @@ public class WorkProcessor : IWorkProcessor
                             continue;
                         }
 
-                        // Check for new review comments since the last commit
-                        Console.WriteLine($"Checking for new review comments since {status.LatestCommitDate?.ToString("u") ?? "unknown"}...");
-                        newComments = await _gitHubClient.GetNewReviewCommentsAsync(owner, repoName, prNumber, status.LatestCommitDate, cancellationToken);
-
-                        if (newComments.Count == 0)
+                        // Check if we should address reviews based on comment IDs
+                        if (_stateTracker.ShouldAddressReviews(prUrl, latestCommentId))
                         {
-                            Console.WriteLine("No new review comments to address");
-                            continue;
+                            // Get comments after the last addressed comment ID
+                            var lastAddressedId = _stateTracker.GetLastAddressedCommentId(prUrl);
+                            Console.WriteLine($"Checking for new review comments (after ID {lastAddressedId?.ToString() ?? "none"})...");
+                            newComments = await _gitHubClient.GetReviewCommentsAfterIdAsync(owner, repoName, prNumber, lastAddressedId, cancellationToken);
+
+                            if (newComments.Count > 0)
+                            {
+                                shouldAddressReviews = true;
+                            }
+                            else
+                            {
+                                Console.WriteLine("No new review comments to address");
+                            }
                         }
+                    }
+                    else if (!shouldResolveConflicts)
+                    {
+                        // Has conflicts but state tracking says we already handled this state
+                        continue;
+                    }
+
+                    if (!shouldResolveConflicts && !shouldAddressReviews)
+                    {
+                        Console.WriteLine("No work needed for this PR");
+                        continue;
                     }
 
                     // We have work to do - now checkout the repo
-                    if (hasConflicts)
+                    if (shouldResolveConflicts)
                     {
                         if (PathUtilities.IsProtectedBranch(status.HeadRefName))
                         {
@@ -124,11 +159,15 @@ public class WorkProcessor : IWorkProcessor
 
                     Console.WriteLine($"Working in: {repoPath}");
 
-                    if (hasConflicts)
+                    if (shouldResolveConflicts)
                     {
                         Console.WriteLine($"PR has conflicts, invoking Claude to rebase {status.HeadRefName} on {status.BaseRefName}");
                         var conflictPrompt = _promptBuilder.BuildConflictResolutionPrompt(status.HeadRefName, status.BaseRefName);
                         await _claudeInteractor.RunClaudeStreamingAsync(conflictPrompt, repoPath, cancellationToken);
+
+                        // Record successful conflict resolution
+                        _stateTracker.RecordConflictResolution(prUrl, fingerprint);
+                        stateModified = true;
                         continue;
                     }
 
@@ -138,6 +177,11 @@ public class WorkProcessor : IWorkProcessor
 
                     // Convert PR to draft so user can review changes before notifying reviewers
                     await _gitHubClient.ConvertToDraftAsync(owner, repoName, prNumber, cancellationToken);
+
+                    // Record successful review resolution with the max comment ID we addressed
+                    var maxCommentId = newComments.Max(c => c.Id);
+                    _stateTracker.RecordReviewResolution(prUrl, fingerprint, maxCommentId);
+                    stateModified = true;
                 }
                 catch (Exception ex)
                 {
@@ -152,6 +196,13 @@ public class WorkProcessor : IWorkProcessor
             {
                 // Suppress exceptions from finally block
             }
+        }
+
+        // Save state if modified
+        if (stateModified)
+        {
+            await _stateTracker.SaveStateAsync(cancellationToken);
+            Console.WriteLine("State saved");
         }
 
         var nextRunTime = startTime.AddMinutes(_options.IntervalMinutes);

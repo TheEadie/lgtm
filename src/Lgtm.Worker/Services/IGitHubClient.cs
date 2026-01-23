@@ -47,4 +47,25 @@ public interface IGitHubClient
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>True if the conversion succeeded, false otherwise.</returns>
     Task<bool> ConvertToDraftAsync(string owner, string repo, int prNumber, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Retrieves review comments from a Pull Request with IDs greater than a specified threshold.
+    /// </summary>
+    /// <param name="owner">The repository owner.</param>
+    /// <param name="repo">The repository name.</param>
+    /// <param name="prNumber">The pull request number.</param>
+    /// <param name="afterId">Only return comments with ID greater than this value. If null, returns all comments.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A list of review comments (may be empty if none found or operation failed).</returns>
+    Task<List<ReviewComment>> GetReviewCommentsAfterIdAsync(string owner, string repo, int prNumber, long? afterId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets the ID of the latest review comment on a Pull Request.
+    /// </summary>
+    /// <param name="owner">The repository owner.</param>
+    /// <param name="repo">The repository name.</param>
+    /// <param name="prNumber">The pull request number.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The ID of the latest comment, or null if no comments exist.</returns>
+    Task<long?> GetLatestCommentIdAsync(string owner, string repo, int prNumber, CancellationToken cancellationToken);
 }

@@ -134,7 +134,7 @@ public class GitHubClient : IGitHubClient
             StartInfo = new ProcessStartInfo
             {
                 FileName = "gh",
-                Arguments = $"pr view {prNumber} --repo {owner}/{repo} --json state,mergeable,headRefName,baseRefName,commits,isDraft",
+                Arguments = $"pr view {prNumber} --repo {owner}/{repo} --json state,mergeable,headRefName,baseRefName,headRefOid,commits,isDraft",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -170,11 +170,16 @@ public class GitHubClient : IGitHubClient
 
             var isDraft = root.TryGetProperty("isDraft", out var isDraftElement) && isDraftElement.GetBoolean();
 
+            var headCommitSha = root.TryGetProperty("headRefOid", out var headRefOidElement)
+                ? headRefOidElement.GetString() ?? ""
+                : "";
+
             return new PrStatus(
                 root.GetProperty("state").GetString() ?? "",
                 root.GetProperty("mergeable").GetString() ?? "",
                 root.GetProperty("headRefName").GetString() ?? "",
                 root.GetProperty("baseRefName").GetString() ?? "",
+                headCommitSha,
                 latestCommitDate,
                 isDraft
             );
@@ -227,6 +232,8 @@ public class GitHubClient : IGitHubClient
                 if (sinceDate.HasValue && createdAt <= sinceDate.Value)
                     continue;
 
+                var id = comment.GetProperty("id").GetInt64();
+
                 var author = comment.TryGetProperty("user", out var user)
                     ? user.GetProperty("login").GetString() ?? "unknown"
                     : "unknown";
@@ -241,7 +248,7 @@ public class GitHubClient : IGitHubClient
 
                 var body = comment.GetProperty("body").GetString() ?? "";
 
-                comments.Add(new ReviewComment(author, path, line, body, createdAt));
+                comments.Add(new ReviewComment(id, author, path, line, body, createdAt));
             }
         }
         catch (JsonException ex)
@@ -284,5 +291,122 @@ public class GitHubClient : IGitHubClient
 
         Console.WriteLine("PR converted to draft");
         return true;
+    }
+
+    /// <inheritdoc/>
+    public async Task<List<ReviewComment>> GetReviewCommentsAfterIdAsync(
+        string owner, string repo, int prNumber, long? afterId, CancellationToken cancellationToken)
+    {
+        var comments = new List<ReviewComment>();
+
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = $"api repos/{owner}/{repo}/pulls/{prNumber}/comments --paginate",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+
+        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0)
+        {
+            Console.WriteLine($"Failed to get PR comments: gh exited with code {process.ExitCode}");
+            return comments;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(output);
+            foreach (var comment in doc.RootElement.EnumerateArray())
+            {
+                var id = comment.GetProperty("id").GetInt64();
+
+                // Skip comments with ID <= afterId
+                if (afterId.HasValue && id <= afterId.Value)
+                    continue;
+
+                var createdAt = DateTimeOffset.Parse(comment.GetProperty("created_at").GetString()!);
+
+                var author = comment.TryGetProperty("user", out var user)
+                    ? user.GetProperty("login").GetString() ?? "unknown"
+                    : "unknown";
+
+                var path = comment.TryGetProperty("path", out var pathElement)
+                    ? pathElement.GetString() ?? ""
+                    : "";
+
+                int? line = comment.TryGetProperty("line", out var lineElement) && lineElement.ValueKind == JsonValueKind.Number
+                    ? lineElement.GetInt32()
+                    : null;
+
+                var body = comment.GetProperty("body").GetString() ?? "";
+
+                comments.Add(new ReviewComment(id, author, path, line, body, createdAt));
+            }
+        }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"Failed to parse PR comments: {ex.Message}");
+        }
+
+        return comments;
+    }
+
+    /// <inheritdoc/>
+    public async Task<long?> GetLatestCommentIdAsync(
+        string owner, string repo, int prNumber, CancellationToken cancellationToken)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = $"api repos/{owner}/{repo}/pulls/{prNumber}/comments --paginate",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+
+        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0)
+        {
+            Console.WriteLine($"Failed to get PR comments: gh exited with code {process.ExitCode}");
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(output);
+            long? maxId = null;
+
+            foreach (var comment in doc.RootElement.EnumerateArray())
+            {
+                var id = comment.GetProperty("id").GetInt64();
+                if (maxId is null || id > maxId)
+                    maxId = id;
+            }
+
+            return maxId;
+        }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"Failed to parse PR comments: {ex.Message}");
+            return null;
+        }
     }
 }

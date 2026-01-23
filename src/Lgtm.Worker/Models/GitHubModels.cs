@@ -15,6 +15,7 @@ public record PrInfo(string Owner, string Repo, int PrNumber);
 /// <param name="Mergeable">The mergeable state (e.g., "MERGEABLE", "CONFLICTING", "UNKNOWN").</param>
 /// <param name="HeadRefName">The name of the head branch (source branch).</param>
 /// <param name="BaseRefName">The name of the base branch (target branch).</param>
+/// <param name="HeadCommitSha">The SHA of the head commit.</param>
 /// <param name="LatestCommitDate">The date/time of the most recent commit, if available.</param>
 /// <param name="IsDraft">Whether the PR is in draft status.</param>
 public record PrStatus(
@@ -22,6 +23,7 @@ public record PrStatus(
     string Mergeable,
     string HeadRefName,
     string BaseRefName,
+    string HeadCommitSha,
     DateTimeOffset? LatestCommitDate,
     bool IsDraft);
 
@@ -41,12 +43,14 @@ public record PrReview(
 /// <summary>
 /// Represents a review comment on specific lines of code in a Pull Request.
 /// </summary>
+/// <param name="Id">The unique identifier of the comment.</param>
 /// <param name="Author">The username of the comment author.</param>
 /// <param name="Path">The file path the comment refers to.</param>
 /// <param name="Line">The line number the comment refers to, if applicable.</param>
 /// <param name="Body">The comment body text.</param>
 /// <param name="CreatedAt">The date/time when the comment was created.</param>
 public record ReviewComment(
+    long Id,
     string Author,
     string Path,
     int? Line,

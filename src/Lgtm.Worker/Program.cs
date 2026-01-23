@@ -48,6 +48,7 @@ builder.Services.AddSingleton(pullRequestUrls);
 builder.Services.AddSingleton<IGitHubClient, GitHubClient>();
 builder.Services.AddSingleton<IClaudeInteractor, ClaudeInteractor>();
 builder.Services.AddSingleton<IResolutionPromptBuilder, ResolutionPromptBuilder>();
+builder.Services.AddSingleton<IPrStateTracker, PrStateTracker>();
 builder.Services.AddSingleton<IWorkProcessor, WorkProcessor>();
 builder.Services.AddHostedService<ScheduledWorkerService>();
 
