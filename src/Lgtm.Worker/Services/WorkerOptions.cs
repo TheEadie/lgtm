@@ -11,5 +11,7 @@ public class WorkerOptions
 public class LgtmConfig
 {
     public List<string> PullRequestUrls { get; set; } = [];
+    public List<string> RepositoryUrls { get; set; } = [];
+    public string? GitHubUsername { get; set; }
     public string? NtfyUrl { get; set; }
 }

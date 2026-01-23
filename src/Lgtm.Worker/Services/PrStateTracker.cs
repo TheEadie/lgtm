@@ -200,4 +200,12 @@ public class PrStateTracker : IPrStateTracker
 
         _store.States[prUrl] = updated;
     }
+
+    /// <inheritdoc/>
+    public IEnumerable<string> GetTrackedPrUrls()
+    {
+        return _store.States
+            .Where(kvp => kvp.Value.SeenAsMergedAt is null)
+            .Select(kvp => kvp.Key);
+    }
 }

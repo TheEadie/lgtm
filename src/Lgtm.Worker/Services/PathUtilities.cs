@@ -14,6 +14,10 @@ public static class PathUtilities
         @"^https://github\.com/(?<owner>[^/]+)/(?<repo>[^/]+)/pull/(?<number>\d+)",
         RegexOptions.Compiled);
 
+    private static readonly Regex RepoUrlRegex = new(
+        @"^https://github\.com/(?<owner>[^/]+)/(?<repo>[^/]+)/?$",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// Expands a path that starts with '~' to use the user's home directory.
     /// </summary>
@@ -58,5 +62,25 @@ public static class PathUtilities
     public static bool IsProtectedBranch(string branchName)
     {
         return ProtectedBranches.Contains(branchName.ToLowerInvariant());
+    }
+
+    /// <summary>
+    /// Parses a GitHub repository URL to extract the owner and repository name.
+    /// </summary>
+    /// <param name="url">The GitHub repository URL to parse (e.g., "https://github.com/owner/repo").</param>
+    /// <returns>A tuple of (owner, repo) if the URL is valid, null otherwise.</returns>
+    public static (string Owner, string Repo)? ParseRepoUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+
+        var match = RepoUrlRegex.Match(url);
+        if (!match.Success)
+            return null;
+
+        var owner = match.Groups["owner"].Value;
+        var repo = match.Groups["repo"].Value;
+
+        return (owner, repo);
     }
 }

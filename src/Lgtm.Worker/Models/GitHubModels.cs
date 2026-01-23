@@ -56,3 +56,10 @@ public record ReviewComment(
     int? Line,
     string Body,
     DateTimeOffset CreatedAt);
+
+/// <summary>
+/// Represents basic information about an open Pull Request.
+/// </summary>
+/// <param name="Number">The pull request number.</param>
+/// <param name="Url">The full URL to the pull request.</param>
+public record OpenPrInfo(int Number, string Url);

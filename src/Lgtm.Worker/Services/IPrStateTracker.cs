@@ -75,4 +75,11 @@ public interface IPrStateTracker
     /// </summary>
     /// <param name="prUrl">The PR URL.</param>
     void RecordMerge(string prUrl);
+
+    /// <summary>
+    /// Gets all PR URLs that are currently being tracked and haven't been marked as merged.
+    /// Used to ensure we continue monitoring PRs until we see their merge.
+    /// </summary>
+    /// <returns>A collection of tracked PR URLs.</returns>
+    IEnumerable<string> GetTrackedPrUrls();
 }

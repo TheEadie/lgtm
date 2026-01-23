@@ -16,17 +16,14 @@ if (!File.Exists(configPath))
     return 1;
 }
 
-List<string> pullRequestUrls;
-string? ntfyUrl;
+LgtmConfig config;
 try
 {
     var json = await File.ReadAllTextAsync(configPath);
-    var config = JsonSerializer.Deserialize<LgtmConfig>(json, new JsonSerializerOptions
+    config = JsonSerializer.Deserialize<LgtmConfig>(json, new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true
-    });
-    pullRequestUrls = config?.PullRequestUrls ?? [];
-    ntfyUrl = config?.NtfyUrl;
+    }) ?? new LgtmConfig();
 }
 catch (JsonException ex)
 {
@@ -34,7 +31,13 @@ catch (JsonException ex)
     return 1;
 }
 
-Console.WriteLine($"Loaded {pullRequestUrls.Count} pull request(s) from {configPath}");
+Console.WriteLine($"Loaded config from {configPath}");
+Console.WriteLine($"  - {config.PullRequestUrls.Count} explicit PR URL(s)");
+Console.WriteLine($"  - {config.RepositoryUrls.Count} repository URL(s) to monitor");
+if (!string.IsNullOrWhiteSpace(config.GitHubUsername))
+{
+    Console.WriteLine($"  - Filtering PRs by author: {config.GitHubUsername}");
+}
 
 var builder = Host.CreateApplicationBuilder(args.Skip(1).ToArray());
 
@@ -44,16 +47,17 @@ builder.Logging.ClearProviders();
 // Configure options
 builder.Services.Configure<WorkerOptions>(
     builder.Configuration.GetSection(WorkerOptions.SectionName));
-builder.Services.AddSingleton(pullRequestUrls);
+builder.Services.AddSingleton(config);
 
 // Register services
 builder.Services.AddSingleton<IGitHubClient, GitHubClient>();
 builder.Services.AddSingleton<IClaudeInteractor, ClaudeInteractor>();
 builder.Services.AddSingleton<IResolutionPromptBuilder, ResolutionPromptBuilder>();
 builder.Services.AddSingleton<IPrStateTracker, PrStateTracker>();
+builder.Services.AddSingleton<IPrUrlResolver, PrUrlResolver>();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<INotificationService>(sp =>
-    new NtfyNotificationService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(), ntfyUrl));
+    new NtfyNotificationService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(), config.NtfyUrl));
 builder.Services.AddSingleton<IWorkProcessor, WorkProcessor>();
 builder.Services.AddHostedService<ScheduledWorkerService>();
 

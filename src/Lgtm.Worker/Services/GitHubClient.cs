@@ -409,4 +409,53 @@ public class GitHubClient : IGitHubClient
             return null;
         }
     }
+
+    /// <inheritdoc/>
+    public async Task<List<OpenPrInfo>> GetOpenPrsByAuthorAsync(
+        string owner, string repo, string author, CancellationToken cancellationToken)
+    {
+        var prs = new List<OpenPrInfo>();
+
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = $"pr list --repo {owner}/{repo} --author {author} --state open --json number,url",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+
+        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0)
+        {
+            Console.WriteLine($"Failed to list PRs for {owner}/{repo}: {error}");
+            return prs;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(output);
+            foreach (var pr in doc.RootElement.EnumerateArray())
+            {
+                var number = pr.GetProperty("number").GetInt32();
+                var url = pr.GetProperty("url").GetString() ?? "";
+                prs.Add(new OpenPrInfo(number, url));
+            }
+        }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"Failed to parse PR list: {ex.Message}");
+        }
+
+        return prs;
+    }
 }

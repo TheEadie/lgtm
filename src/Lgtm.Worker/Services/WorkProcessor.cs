@@ -10,7 +10,7 @@ public class WorkProcessor : IWorkProcessor
     private readonly IResolutionPromptBuilder _promptBuilder;
     private readonly IPrStateTracker _stateTracker;
     private readonly INotificationService _notificationService;
-    private readonly List<string> _pullRequestUrls;
+    private readonly IPrUrlResolver _prUrlResolver;
     private readonly WorkerOptions _options;
     private int _executionCount;
 
@@ -20,7 +20,7 @@ public class WorkProcessor : IWorkProcessor
         IResolutionPromptBuilder promptBuilder,
         IPrStateTracker stateTracker,
         INotificationService notificationService,
-        List<string> pullRequestUrls,
+        IPrUrlResolver prUrlResolver,
         IOptions<WorkerOptions> options)
     {
         _gitHubClient = gitHubClient;
@@ -28,7 +28,7 @@ public class WorkProcessor : IWorkProcessor
         _promptBuilder = promptBuilder;
         _stateTracker = stateTracker;
         _notificationService = notificationService;
-        _pullRequestUrls = pullRequestUrls;
+        _prUrlResolver = prUrlResolver;
         _options = options.Value;
     }
 
@@ -38,17 +38,22 @@ public class WorkProcessor : IWorkProcessor
         var count = Interlocked.Increment(ref _executionCount);
         Console.WriteLine($"Starting execution {count}");
 
-        if (_pullRequestUrls.Count == 0)
-        {
-            Console.WriteLine("No pull requests configured.");
-            return;
-        }
-
-        // Load persisted state
+        // Load persisted state first (needed for PR URL resolution to include tracked PRs)
         await _stateTracker.LoadStateAsync(cancellationToken);
         var stateModified = false;
 
-        foreach (var prUrl in _pullRequestUrls)
+        // Resolve PR URLs dynamically each cycle to discover new PRs
+        var pullRequestUrls = await _prUrlResolver.GetPrUrlsAsync(cancellationToken);
+
+        if (pullRequestUrls.Count == 0)
+        {
+            Console.WriteLine("No pull requests to process.");
+            return;
+        }
+
+        Console.WriteLine($"Processing {pullRequestUrls.Count} pull request(s)");
+
+        foreach (var prUrl in pullRequestUrls)
         {
             if (cancellationToken.IsCancellationRequested)
                 break;

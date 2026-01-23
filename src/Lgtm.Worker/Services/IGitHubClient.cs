@@ -68,4 +68,14 @@ public interface IGitHubClient
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The ID of the latest comment, or null if no comments exist.</returns>
     Task<long?> GetLatestCommentIdAsync(string owner, string repo, int prNumber, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets all open Pull Requests in a repository by a specific author.
+    /// </summary>
+    /// <param name="owner">The repository owner.</param>
+    /// <param name="repo">The repository name.</param>
+    /// <param name="author">The GitHub username of the PR author.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A list of open PRs by the specified author.</returns>
+    Task<List<OpenPrInfo>> GetOpenPrsByAuthorAsync(string owner, string repo, string author, CancellationToken cancellationToken);
 }
