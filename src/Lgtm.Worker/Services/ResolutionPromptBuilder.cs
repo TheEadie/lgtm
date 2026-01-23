@@ -24,7 +24,7 @@ public class ResolutionPromptBuilder : IResolutionPromptBuilder
     }
 
     /// <inheritdoc/>
-    public string BuildReviewResolutionPrompt(string headRefName, List<ReviewComment> comments)
+    public string BuildReviewResolutionPrompt(string headRefName, List<ReviewComment> comments, string? lessons = null)
     {
         var commentDescriptions = string.Join("\n\n", comments.Select(c =>
         {
@@ -36,9 +36,21 @@ public class ResolutionPromptBuilder : IResolutionPromptBuilder
             return $"[{c.Author}] {location}\n{c.Body}";
         }));
 
+        var lessonsSection = string.IsNullOrWhiteSpace(lessons)
+            ? ""
+            : $"""
+
+            ## Lessons learned for this repository
+
+            Keep these in mind while making changes - these are patterns this team cares about:
+
+            {lessons}
+
+            """;
+
         return $"""
             There are new review comments on the PR for branch '{headRefName}' that need to be addressed.
-
+            {lessonsSection}
             Review comments:
             {commentDescriptions}
 

@@ -51,6 +51,40 @@ public class ClaudeInteractor : IClaudeInteractor
         }
     }
 
+    /// <inheritdoc/>
+    public async Task<string> GetCompletionAsync(string prompt, CancellationToken cancellationToken)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "claude",
+                Arguments = "--output-format text --print --max-turns 1 -p -",
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+
+        await process.StandardInput.WriteAsync(prompt);
+        process.StandardInput.Close();
+
+        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"Claude CLI exited with code {process.ExitCode}: {error}");
+        }
+
+        return output.Trim();
+    }
+
     private static void ProcessStreamEvent(string json)
     {
         try

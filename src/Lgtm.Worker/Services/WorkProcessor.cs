@@ -11,6 +11,8 @@ public class WorkProcessor : IWorkProcessor
     private readonly IPrStateTracker _stateTracker;
     private readonly INotificationService _notificationService;
     private readonly IPrUrlResolver _prUrlResolver;
+    private readonly ILessonExtractor _lessonExtractor;
+    private readonly ILessonStore _lessonStore;
     private readonly WorkerOptions _options;
     private int _executionCount;
 
@@ -21,6 +23,8 @@ public class WorkProcessor : IWorkProcessor
         IPrStateTracker stateTracker,
         INotificationService notificationService,
         IPrUrlResolver prUrlResolver,
+        ILessonExtractor lessonExtractor,
+        ILessonStore lessonStore,
         IOptions<WorkerOptions> options)
     {
         _gitHubClient = gitHubClient;
@@ -29,6 +33,8 @@ public class WorkProcessor : IWorkProcessor
         _stateTracker = stateTracker;
         _notificationService = notificationService;
         _prUrlResolver = prUrlResolver;
+        _lessonExtractor = lessonExtractor;
+        _lessonStore = lessonStore;
         _options = options.Value;
     }
 
@@ -189,8 +195,23 @@ public class WorkProcessor : IWorkProcessor
                         continue;
                     }
 
-                    Console.WriteLine($"Found {newComments!.Count} new review comment(s), invoking Claude to address them");
-                    var reviewPrompt = _promptBuilder.BuildReviewResolutionPrompt(status.HeadRefName, newComments);
+                    Console.WriteLine($"Found {newComments!.Count} new review comment(s), extracting lessons and addressing them");
+
+                    // Extract and store lessons from each comment before making fixes
+                    foreach (var comment in newComments)
+                    {
+                        var lesson = await _lessonExtractor.ExtractLessonAsync(comment, cancellationToken);
+                        if (!string.IsNullOrEmpty(lesson))
+                        {
+                            Console.WriteLine($"Learned: {lesson}");
+                            await _lessonStore.SaveLessonAsync(owner, repoName, lesson, cancellationToken);
+                        }
+                    }
+
+                    // Get all lessons (including newly added ones) to include in the fix prompt
+                    var lessons = await _lessonStore.GetLessonsAsync(owner, repoName);
+
+                    var reviewPrompt = _promptBuilder.BuildReviewResolutionPrompt(status.HeadRefName, newComments, lessons);
                     await _claudeInteractor.RunClaudeStreamingAsync(reviewPrompt, repoPath, cancellationToken);
 
                     // Convert PR to draft so user can review changes before notifying reviewers

@@ -13,4 +13,13 @@ public interface IClaudeInteractor
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="InvalidOperationException">Thrown when Claude CLI exits with a non-zero code.</exception>
     Task RunClaudeStreamingAsync(string prompt, string workingDirectory, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs Claude CLI in non-streaming mode for simple text responses.
+    /// </summary>
+    /// <param name="prompt">The prompt to send to Claude.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Claude's text response.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Claude CLI exits with a non-zero code.</exception>
+    Task<string> GetCompletionAsync(string prompt, CancellationToken cancellationToken);
 }

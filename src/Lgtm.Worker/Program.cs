@@ -55,6 +55,8 @@ builder.Services.AddSingleton<IClaudeInteractor, ClaudeInteractor>();
 builder.Services.AddSingleton<IResolutionPromptBuilder, ResolutionPromptBuilder>();
 builder.Services.AddSingleton<IPrStateTracker, PrStateTracker>();
 builder.Services.AddSingleton<IPrUrlResolver, PrUrlResolver>();
+builder.Services.AddSingleton<ILessonExtractor, LessonExtractor>();
+builder.Services.AddSingleton<ILessonStore, LessonStore>();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<INotificationService>(sp =>
     new NtfyNotificationService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(), config.NtfyUrl));

@@ -20,6 +20,7 @@ public interface IResolutionPromptBuilder
     /// </summary>
     /// <param name="headRefName">The name of the head branch (source branch).</param>
     /// <param name="comments">The list of review comments to address.</param>
+    /// <param name="lessons">Optional lessons learned for this repository.</param>
     /// <returns>A prompt instructing Claude how to address the review comments.</returns>
-    string BuildReviewResolutionPrompt(string headRefName, List<ReviewComment> comments);
+    string BuildReviewResolutionPrompt(string headRefName, List<ReviewComment> comments, string? lessons = null);
 }
