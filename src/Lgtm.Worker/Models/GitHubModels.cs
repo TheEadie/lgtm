@@ -63,3 +63,12 @@ public record ReviewComment(
 /// <param name="Number">The pull request number.</param>
 /// <param name="Url">The full URL to the pull request.</param>
 public record OpenPrInfo(int Number, string Url);
+
+/// <summary>
+/// Represents a pull request item from a list query.
+/// </summary>
+/// <param name="Number">The pull request number.</param>
+/// <param name="Title">The pull request title.</param>
+/// <param name="State">The pull request state (e.g., "open", "closed", "merged").</param>
+/// <param name="Author">The username of the PR author.</param>
+public record PrListItem(int Number, string Title, string State, string Author);

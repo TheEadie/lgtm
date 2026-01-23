@@ -21,4 +21,13 @@ public interface ILessonStore
     /// <param name="newLesson">The new lesson to add.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task SaveLessonAsync(string owner, string repo, string newLesson, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Initializes the lessons file for a repository by extracting lessons from historic PRs.
+    /// </summary>
+    /// <param name="owner">The repository owner.</param>
+    /// <param name="repo">The repository name.</param>
+    /// <param name="authorFilter">Optional author filter. If specified, only processes PRs by this author.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task InitializeLessonsFromHistoryAsync(string owner, string repo, string? authorFilter, CancellationToken cancellationToken);
 }

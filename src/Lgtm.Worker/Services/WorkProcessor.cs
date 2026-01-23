@@ -14,7 +14,9 @@ public class WorkProcessor : IWorkProcessor
     private readonly ILessonExtractor _lessonExtractor;
     private readonly ILessonStore _lessonStore;
     private readonly WorkerOptions _options;
+    private readonly LgtmConfig _config;
     private int _executionCount;
+    private readonly HashSet<string> _reposCheckedForLessons = new();
 
     public WorkProcessor(
         IGitHubClient gitHubClient,
@@ -25,7 +27,8 @@ public class WorkProcessor : IWorkProcessor
         IPrUrlResolver prUrlResolver,
         ILessonExtractor lessonExtractor,
         ILessonStore lessonStore,
-        IOptions<WorkerOptions> options)
+        IOptions<WorkerOptions> options,
+        LgtmConfig config)
     {
         _gitHubClient = gitHubClient;
         _claudeInteractor = claudeInteractor;
@@ -36,6 +39,7 @@ public class WorkProcessor : IWorkProcessor
         _lessonExtractor = lessonExtractor;
         _lessonStore = lessonStore;
         _options = options.Value;
+        _config = config;
     }
 
     public async Task ProcessAsync(CancellationToken cancellationToken)
@@ -78,6 +82,19 @@ public class WorkProcessor : IWorkProcessor
                     }
 
                     var (owner, repoName, prNumber) = prInfo;
+
+                    // Initialize lessons from history if this is the first time seeing this repo
+                    var repoKey = $"{owner}/{repoName}";
+                    if (!_reposCheckedForLessons.Contains(repoKey))
+                    {
+                        _reposCheckedForLessons.Add(repoKey);
+                        var existingLessons = await _lessonStore.GetLessonsAsync(owner, repoName);
+                        if (existingLessons is null)
+                        {
+                            Console.WriteLine($"No lessons file found for {repoKey}, initializing from PR history...");
+                            await _lessonStore.InitializeLessonsFromHistoryAsync(owner, repoName, _config.GitHubUsername, cancellationToken);
+                        }
+                    }
 
                     // Get PR status first (uses GitHub API, no checkout needed)
                     var status = await _gitHubClient.GetPrStatusAsync(owner, repoName, prNumber, cancellationToken);

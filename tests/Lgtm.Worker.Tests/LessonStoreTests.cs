@@ -7,12 +7,16 @@ namespace Lgtm.Worker.Tests;
 public class LessonStoreTests : IDisposable
 {
     private readonly IClaudeInteractor _claudeInteractor;
+    private readonly IGitHubClient _gitHubClient;
+    private readonly ILessonExtractor _lessonExtractor;
     private readonly string _tempDir;
     private readonly string _originalHome;
 
     public LessonStoreTests()
     {
         _claudeInteractor = Substitute.For<IClaudeInteractor>();
+        _gitHubClient = Substitute.For<IGitHubClient>();
+        _lessonExtractor = Substitute.For<ILessonExtractor>();
         _tempDir = Path.Combine(Path.GetTempPath(), $"lgtm-tests-{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempDir);
 
@@ -37,7 +41,7 @@ public class LessonStoreTests : IDisposable
     public async Task GetLessonsAsync_ReturnsNull_WhenFileDoesNotExist()
     {
         // Arrange
-        var sut = new LessonStore(_claudeInteractor);
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
 
         // Act
         var result = await sut.GetLessonsAsync("owner", "repo");
@@ -56,7 +60,7 @@ public class LessonStoreTests : IDisposable
         var expectedContent = "# Lessons\n\n- Use async/await";
         await File.WriteAllTextAsync(filePath, expectedContent);
 
-        var sut = new LessonStore(_claudeInteractor);
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
 
         // Act
         var result = await sut.GetLessonsAsync("owner", "repo");
@@ -74,7 +78,7 @@ public class LessonStoreTests : IDisposable
         var filePath = Path.Combine(lessonsDir, "repo.md");
         await File.WriteAllTextAsync(filePath, "   ");
 
-        var sut = new LessonStore(_claudeInteractor);
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
 
         // Act
         var result = await sut.GetLessonsAsync("owner", "repo");
@@ -87,7 +91,7 @@ public class LessonStoreTests : IDisposable
     public async Task SaveLessonAsync_CreatesDirectoryStructure_WhenMissing()
     {
         // Arrange
-        var sut = new LessonStore(_claudeInteractor);
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("# Lessons for owner/repo\n\n## General\n\n- Test lesson");
 
@@ -103,7 +107,7 @@ public class LessonStoreTests : IDisposable
     public async Task SaveLessonAsync_CallsClaudeToCreateInitialFile_WhenNoExistingLessons()
     {
         // Arrange
-        var sut = new LessonStore(_claudeInteractor);
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("# Lessons for owner/repo\n\n## General\n\n- Test lesson");
 
@@ -129,7 +133,7 @@ public class LessonStoreTests : IDisposable
         var existingContent = "# Lessons for owner/repo\n\n## Code Style\n\n- Existing lesson";
         await File.WriteAllTextAsync(filePath, existingContent);
 
-        var sut = new LessonStore(_claudeInteractor);
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("# Lessons for owner/repo\n\n## Code Style\n\n- Existing lesson\n- New lesson");
 
@@ -150,7 +154,7 @@ public class LessonStoreTests : IDisposable
     public async Task SaveLessonAsync_WritesClaudeResponse_ToFile()
     {
         // Arrange
-        var sut = new LessonStore(_claudeInteractor);
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
         var expectedContent = "# Lessons for owner/repo\n\n## Testing\n\n- Test lesson";
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(expectedContent);
@@ -168,7 +172,7 @@ public class LessonStoreTests : IDisposable
     public async Task SaveLessonAsync_FallsBackToSimpleFormat_WhenClaudeFails_ForNewFile()
     {
         // Arrange
-        var sut = new LessonStore(_claudeInteractor);
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Claude failed"));
 
@@ -193,7 +197,7 @@ public class LessonStoreTests : IDisposable
         var existingContent = "# Lessons for owner/repo\n\n## Code Style\n\n- Existing lesson";
         await File.WriteAllTextAsync(filePath, existingContent);
 
-        var sut = new LessonStore(_claudeInteractor);
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Claude failed"));
 

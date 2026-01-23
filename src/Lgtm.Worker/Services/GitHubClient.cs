@@ -458,4 +458,67 @@ public class GitHubClient : IGitHubClient
 
         return prs;
     }
+
+    /// <inheritdoc/>
+    public async Task<List<PrListItem>> GetRecentPrsAsync(
+        string owner, string repo, int limit, string? authorFilter, CancellationToken cancellationToken)
+    {
+        var prs = new List<PrListItem>();
+
+        var authorArg = string.IsNullOrWhiteSpace(authorFilter) ? "" : $" --author {authorFilter}";
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = $"pr list --repo {owner}/{repo} --state all --limit {limit}{authorArg} --json number,title,state,author",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+
+        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0)
+        {
+            Console.WriteLine($"Failed to list PRs for {owner}/{repo}: {error}");
+            return prs;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(output);
+            foreach (var pr in doc.RootElement.EnumerateArray())
+            {
+                var number = pr.GetProperty("number").GetInt32();
+                var title = pr.GetProperty("title").GetString() ?? "";
+                var state = pr.GetProperty("state").GetString() ?? "";
+                var author = pr.TryGetProperty("author", out var authorElement) &&
+                             authorElement.TryGetProperty("login", out var loginElement)
+                    ? loginElement.GetString() ?? "unknown"
+                    : "unknown";
+                prs.Add(new PrListItem(number, title, state, author));
+            }
+        }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"Failed to parse PR list: {ex.Message}");
+        }
+
+        return prs;
+    }
+
+    /// <inheritdoc/>
+    public Task<List<ReviewComment>> GetAllReviewCommentsAsync(
+        string owner, string repo, int prNumber, CancellationToken cancellationToken)
+    {
+        // Delegate to the existing method with no ID filter
+        return GetReviewCommentsAfterIdAsync(owner, repo, prNumber, afterId: null, cancellationToken);
+    }
 }

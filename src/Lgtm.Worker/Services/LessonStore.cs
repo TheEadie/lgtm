@@ -6,11 +6,16 @@ namespace Lgtm.Worker.Services;
 public class LessonStore : ILessonStore
 {
     private readonly IClaudeInteractor _claudeInteractor;
+    private readonly IGitHubClient _gitHubClient;
+    private readonly ILessonExtractor _lessonExtractor;
     private const string LessonsBaseDir = "~/.lgtm/lessons";
+    private const int HistoricPrLimit = 50;
 
-    public LessonStore(IClaudeInteractor claudeInteractor)
+    public LessonStore(IClaudeInteractor claudeInteractor, IGitHubClient gitHubClient, ILessonExtractor lessonExtractor)
     {
         _claudeInteractor = claudeInteractor;
+        _gitHubClient = gitHubClient;
+        _lessonExtractor = lessonExtractor;
     }
 
     /// <inheritdoc/>
@@ -117,6 +122,53 @@ public class LessonStore : ILessonStore
             // Return existing content unchanged if consolidation fails
             return existingContent;
         }
+    }
+
+    /// <inheritdoc/>
+    public async Task InitializeLessonsFromHistoryAsync(
+        string owner, string repo, string? authorFilter, CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"Fetching last {HistoricPrLimit} PRs for {owner}/{repo}...");
+        var prs = await _gitHubClient.GetRecentPrsAsync(owner, repo, HistoricPrLimit, authorFilter, cancellationToken);
+
+        if (prs.Count == 0)
+        {
+            Console.WriteLine("No PRs found to extract lessons from");
+            return;
+        }
+
+        Console.WriteLine($"Found {prs.Count} PRs, extracting lessons from review comments...");
+
+        var lessonsExtracted = 0;
+        var prsProcessed = 0;
+
+        foreach (var pr in prs)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                break;
+
+            prsProcessed++;
+            Console.Write($"\rProcessing PR {prsProcessed}/{prs.Count}: #{pr.Number} - {pr.Title[..Math.Min(40, pr.Title.Length)]}...");
+
+            var comments = await _gitHubClient.GetAllReviewCommentsAsync(owner, repo, pr.Number, cancellationToken);
+
+            foreach (var comment in comments)
+            {
+                // Skip self-comments (comments by the PR author)
+                if (string.Equals(comment.Author, pr.Author, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var lesson = await _lessonExtractor.ExtractLessonAsync(comment, cancellationToken);
+                if (!string.IsNullOrEmpty(lesson))
+                {
+                    await SaveLessonAsync(owner, repo, lesson, cancellationToken);
+                    lessonsExtracted++;
+                }
+            }
+        }
+
+        Console.WriteLine(); // New line after progress
+        Console.WriteLine($"Initialization complete: extracted {lessonsExtracted} lessons from {prsProcessed} PRs");
     }
 
     private static string GetLessonsFilePath(string owner, string repo)

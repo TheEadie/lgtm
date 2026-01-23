@@ -78,4 +78,25 @@ public interface IGitHubClient
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A list of open PRs by the specified author.</returns>
     Task<List<OpenPrInfo>> GetOpenPrsByAuthorAsync(string owner, string repo, string author, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets recent Pull Requests from a repository.
+    /// </summary>
+    /// <param name="owner">The repository owner.</param>
+    /// <param name="repo">The repository name.</param>
+    /// <param name="limit">Maximum number of PRs to return.</param>
+    /// <param name="authorFilter">Optional author filter. If specified, only returns PRs by this author.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A list of recent PRs.</returns>
+    Task<List<PrListItem>> GetRecentPrsAsync(string owner, string repo, int limit, string? authorFilter, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets all review comments from a Pull Request.
+    /// </summary>
+    /// <param name="owner">The repository owner.</param>
+    /// <param name="repo">The repository name.</param>
+    /// <param name="prNumber">The pull request number.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A list of all review comments.</returns>
+    Task<List<ReviewComment>> GetAllReviewCommentsAsync(string owner, string repo, int prNumber, CancellationToken cancellationToken);
 }
