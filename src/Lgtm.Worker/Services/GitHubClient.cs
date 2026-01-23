@@ -134,7 +134,7 @@ public class GitHubClient : IGitHubClient
             StartInfo = new ProcessStartInfo
             {
                 FileName = "gh",
-                Arguments = $"pr view {prNumber} --repo {owner}/{repo} --json state,mergeable,headRefName,baseRefName,commits",
+                Arguments = $"pr view {prNumber} --repo {owner}/{repo} --json state,mergeable,headRefName,baseRefName,commits,isDraft",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -168,12 +168,15 @@ public class GitHubClient : IGitHubClient
                 }
             }
 
+            var isDraft = root.TryGetProperty("isDraft", out var isDraftElement) && isDraftElement.GetBoolean();
+
             return new PrStatus(
                 root.GetProperty("state").GetString() ?? "",
                 root.GetProperty("mergeable").GetString() ?? "",
                 root.GetProperty("headRefName").GetString() ?? "",
                 root.GetProperty("baseRefName").GetString() ?? "",
-                latestCommitDate
+                latestCommitDate,
+                isDraft
             );
         }
         catch (JsonException ex)
@@ -247,5 +250,39 @@ public class GitHubClient : IGitHubClient
         }
 
         return comments;
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> ConvertToDraftAsync(string owner, string repo, int prNumber, CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"Converting PR #{prNumber} to draft...");
+
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = $"pr ready {prNumber} --repo {owner}/{repo} --undo",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+
+        await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0)
+        {
+            Console.WriteLine($"Warning: Failed to convert PR to draft: {error}");
+            return false;
+        }
+
+        Console.WriteLine("PR converted to draft");
+        return true;
     }
 }

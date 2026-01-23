@@ -37,4 +37,14 @@ public interface IGitHubClient
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A list of review comments (may be empty if none found or operation failed).</returns>
     Task<List<ReviewComment>> GetNewReviewCommentsAsync(string owner, string repo, int prNumber, DateTimeOffset? sinceDate, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Converts a Pull Request to draft status.
+    /// </summary>
+    /// <param name="owner">The repository owner.</param>
+    /// <param name="repo">The repository name.</param>
+    /// <param name="prNumber">The pull request number.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if the conversion succeeded, false otherwise.</returns>
+    Task<bool> ConvertToDraftAsync(string owner, string repo, int prNumber, CancellationToken cancellationToken);
 }

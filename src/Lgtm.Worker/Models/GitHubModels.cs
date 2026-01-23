@@ -16,12 +16,14 @@ public record PrInfo(string Owner, string Repo, int PrNumber);
 /// <param name="HeadRefName">The name of the head branch (source branch).</param>
 /// <param name="BaseRefName">The name of the base branch (target branch).</param>
 /// <param name="LatestCommitDate">The date/time of the most recent commit, if available.</param>
+/// <param name="IsDraft">Whether the PR is in draft status.</param>
 public record PrStatus(
     string State,
     string Mergeable,
     string HeadRefName,
     string BaseRefName,
-    DateTimeOffset? LatestCommitDate);
+    DateTimeOffset? LatestCommitDate,
+    bool IsDraft);
 
 /// <summary>
 /// Represents a review submitted on a Pull Request.

@@ -85,6 +85,12 @@ public class WorkProcessor : IWorkProcessor
                         continue;
                     }
 
+                    if (status.IsDraft)
+                    {
+                        Console.WriteLine("PR is a draft (pending user review), skipping");
+                        continue;
+                    }
+
                     if (status.Mergeable == "CONFLICTING")
                     {
                         if (PathUtilities.IsProtectedBranch(status.HeadRefName))
@@ -118,6 +124,9 @@ public class WorkProcessor : IWorkProcessor
                     Console.WriteLine($"Found {newComments.Count} new review comment(s), invoking Claude to address them");
                     var reviewPrompt = _promptBuilder.BuildReviewResolutionPrompt(status.HeadRefName, newComments);
                     await _claudeInteractor.RunClaudeStreamingAsync(reviewPrompt, repoPath, cancellationToken);
+
+                    // Convert PR to draft so user can review changes before notifying reviewers
+                    await _gitHubClient.ConvertToDraftAsync(owner, repoName, prNumber, cancellationToken);
                 }
                 catch (Exception ex)
                 {
