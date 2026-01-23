@@ -58,16 +58,7 @@ public class WorkProcessor : IWorkProcessor
 
                     var (owner, repoName, prNumber) = prInfo;
 
-                    // Ensure repo is cloned and checked out to the PR branch
-                    var repoPath = await _gitHubClient.EnsureRepoCheckedOutAsync(owner, repoName, prNumber, cancellationToken);
-                    if (repoPath is null)
-                    {
-                        Console.WriteLine("Failed to clone/checkout repository, skipping");
-                        continue;
-                    }
-
-                    Console.WriteLine($"Working in: {repoPath}");
-
+                    // Get PR status first (uses GitHub API, no checkout needed)
                     var status = await _gitHubClient.GetPrStatusAsync(owner, repoName, prNumber, cancellationToken);
 
                     if (status is null)
@@ -91,37 +82,57 @@ public class WorkProcessor : IWorkProcessor
                         continue;
                     }
 
-                    if (status.Mergeable == "CONFLICTING")
+                    // Determine if there's work to do before checking out the repo
+                    bool hasConflicts = status.Mergeable == "CONFLICTING";
+                    List<ReviewComment>? newComments = null;
+
+                    if (!hasConflicts)
+                    {
+                        if (status.Mergeable != "MERGEABLE" && status.Mergeable != "UNKNOWN")
+                        {
+                            Console.WriteLine($"Unknown mergeable state: {status.Mergeable}, skipping");
+                            continue;
+                        }
+
+                        // Check for new review comments since the last commit
+                        Console.WriteLine($"Checking for new review comments since {status.LatestCommitDate?.ToString("u") ?? "unknown"}...");
+                        newComments = await _gitHubClient.GetNewReviewCommentsAsync(owner, repoName, prNumber, status.LatestCommitDate, cancellationToken);
+
+                        if (newComments.Count == 0)
+                        {
+                            Console.WriteLine("No new review comments to address");
+                            continue;
+                        }
+                    }
+
+                    // We have work to do - now checkout the repo
+                    if (hasConflicts)
                     {
                         if (PathUtilities.IsProtectedBranch(status.HeadRefName))
                         {
                             Console.WriteLine($"ERROR: Cannot rebase protected branch '{status.HeadRefName}', skipping");
                             continue;
                         }
+                    }
 
+                    var repoPath = await _gitHubClient.EnsureRepoCheckedOutAsync(owner, repoName, prNumber, cancellationToken);
+                    if (repoPath is null)
+                    {
+                        Console.WriteLine("Failed to clone/checkout repository, skipping");
+                        continue;
+                    }
+
+                    Console.WriteLine($"Working in: {repoPath}");
+
+                    if (hasConflicts)
+                    {
                         Console.WriteLine($"PR has conflicts, invoking Claude to rebase {status.HeadRefName} on {status.BaseRefName}");
                         var conflictPrompt = _promptBuilder.BuildConflictResolutionPrompt(status.HeadRefName, status.BaseRefName);
                         await _claudeInteractor.RunClaudeStreamingAsync(conflictPrompt, repoPath, cancellationToken);
                         continue;
                     }
 
-                    if (status.Mergeable != "MERGEABLE" && status.Mergeable != "UNKNOWN")
-                    {
-                        Console.WriteLine($"Unknown mergeable state: {status.Mergeable}, skipping");
-                        continue;
-                    }
-
-                    // Check for new review comments since the last commit
-                    Console.WriteLine($"Checking for new review comments since {status.LatestCommitDate?.ToString("u") ?? "unknown"}...");
-                    var newComments = await _gitHubClient.GetNewReviewCommentsAsync(owner, repoName, prNumber, status.LatestCommitDate, cancellationToken);
-
-                    if (newComments.Count == 0)
-                    {
-                        Console.WriteLine("No new review comments to address");
-                        continue;
-                    }
-
-                    Console.WriteLine($"Found {newComments.Count} new review comment(s), invoking Claude to address them");
+                    Console.WriteLine($"Found {newComments!.Count} new review comment(s), invoking Claude to address them");
                     var reviewPrompt = _promptBuilder.BuildReviewResolutionPrompt(status.HeadRefName, newComments);
                     await _claudeInteractor.RunClaudeStreamingAsync(reviewPrompt, repoPath, cancellationToken);
 
