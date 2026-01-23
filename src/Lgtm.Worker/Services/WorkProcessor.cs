@@ -9,6 +9,7 @@ public class WorkProcessor : IWorkProcessor
     private readonly IClaudeInteractor _claudeInteractor;
     private readonly IResolutionPromptBuilder _promptBuilder;
     private readonly IPrStateTracker _stateTracker;
+    private readonly INotificationService _notificationService;
     private readonly List<string> _pullRequestUrls;
     private readonly WorkerOptions _options;
     private int _executionCount;
@@ -18,6 +19,7 @@ public class WorkProcessor : IWorkProcessor
         IClaudeInteractor claudeInteractor,
         IResolutionPromptBuilder promptBuilder,
         IPrStateTracker stateTracker,
+        INotificationService notificationService,
         List<string> pullRequestUrls,
         IOptions<WorkerOptions> options)
     {
@@ -25,6 +27,7 @@ public class WorkProcessor : IWorkProcessor
         _claudeInteractor = claudeInteractor;
         _promptBuilder = promptBuilder;
         _stateTracker = stateTracker;
+        _notificationService = notificationService;
         _pullRequestUrls = pullRequestUrls;
         _options = options.Value;
     }
@@ -85,6 +88,7 @@ public class WorkProcessor : IWorkProcessor
                             Console.WriteLine("PR has been merged!");
                             _stateTracker.RecordMerge(prUrl);
                             stateModified = true;
+                            await _notificationService.NotifyPrMergedAsync(prUrl, cancellationToken);
                         }
                         else
                         {
@@ -191,6 +195,7 @@ public class WorkProcessor : IWorkProcessor
                     var maxCommentId = newComments.Max(c => c.Id);
                     _stateTracker.RecordReviewResolution(prUrl, fingerprint, maxCommentId);
                     stateModified = true;
+                    await _notificationService.NotifyReviewsAddressedAsync(prUrl, newComments.Count, cancellationToken);
                 }
                 catch (Exception ex)
                 {

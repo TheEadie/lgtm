@@ -17,6 +17,7 @@ if (!File.Exists(configPath))
 }
 
 List<string> pullRequestUrls;
+string? ntfyUrl;
 try
 {
     var json = await File.ReadAllTextAsync(configPath);
@@ -25,6 +26,7 @@ try
         PropertyNameCaseInsensitive = true
     });
     pullRequestUrls = config?.PullRequestUrls ?? [];
+    ntfyUrl = config?.NtfyUrl;
 }
 catch (JsonException ex)
 {
@@ -49,6 +51,9 @@ builder.Services.AddSingleton<IGitHubClient, GitHubClient>();
 builder.Services.AddSingleton<IClaudeInteractor, ClaudeInteractor>();
 builder.Services.AddSingleton<IResolutionPromptBuilder, ResolutionPromptBuilder>();
 builder.Services.AddSingleton<IPrStateTracker, PrStateTracker>();
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<INotificationService>(sp =>
+    new NtfyNotificationService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(), ntfyUrl));
 builder.Services.AddSingleton<IWorkProcessor, WorkProcessor>();
 builder.Services.AddHostedService<ScheduledWorkerService>();
 

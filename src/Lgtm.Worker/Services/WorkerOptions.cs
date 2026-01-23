@@ -11,4 +11,5 @@ public class WorkerOptions
 public class LgtmConfig
 {
     public List<string> PullRequestUrls { get; set; } = [];
+    public string? NtfyUrl { get; set; }
 }
