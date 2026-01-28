@@ -56,9 +56,11 @@ public class ResolutionPromptBuilder : IResolutionPromptBuilder
 
             Please:
             1. Read and understand each review comment
-            2. Make the necessary code changes to address the feedback
-            3. Commit your changes with a descriptive message referencing the review feedback
-            4. Push your changes: git push origin {headRefName}
+            2. For EACH review comment, make a SEPARATE commit:
+               - Address one comment at a time
+               - Commit after fixing each comment with a message like: "Address review: [brief description of the fix]"
+               - Include the comment author in the commit message when helpful
+            3. After all commits are made, push your changes: git push origin {headRefName}
 
             IMPORTANT: You are working on branch '{headRefName}'. Do not force push - use a regular push.
             """;
