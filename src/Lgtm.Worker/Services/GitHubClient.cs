@@ -18,7 +18,7 @@ public class GitHubClient : IGitHubClient
     }
 
     /// <inheritdoc/>
-    public async Task<string?> EnsureRepoCheckedOutAsync(string owner, string repoName, int prNumber, CancellationToken cancellationToken)
+    public async Task<string?> EnsureRepoCheckedOutAsync(string owner, string repoName, int prNumber, string headRefName, CancellationToken cancellationToken)
     {
         var workspaceDir = PathUtilities.ExpandPath(_options.WorkspaceDirectory);
 
@@ -94,7 +94,7 @@ public class GitHubClient : IGitHubClient
             }
         }
 
-        // Checkout the PR branch
+        // Checkout the PR branch (--force handles diverged local branches)
         Console.WriteLine($"Checking out PR #{prNumber}...");
 
         using var checkoutProcess = new Process
@@ -102,7 +102,7 @@ public class GitHubClient : IGitHubClient
             StartInfo = new ProcessStartInfo
             {
                 FileName = "gh",
-                Arguments = $"pr checkout {prNumber}",
+                Arguments = $"pr checkout {prNumber} --force",
                 WorkingDirectory = repoPath,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -123,6 +123,33 @@ public class GitHubClient : IGitHubClient
         }
 
         Console.WriteLine($"Successfully checked out PR branch");
+
+        // Reset to match remote exactly (handles diverged local branches)
+        Console.WriteLine($"Resetting to remote state...");
+        using var resetProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = $"reset --hard origin/{headRefName}",
+                WorkingDirectory = repoPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        resetProcess.Start();
+        await resetProcess.StandardOutput.ReadToEndAsync(cancellationToken);
+        var resetError = await resetProcess.StandardError.ReadToEndAsync(cancellationToken);
+        await resetProcess.WaitForExitAsync(cancellationToken);
+
+        if (resetProcess.ExitCode != 0)
+        {
+            Console.WriteLine($"Warning: Failed to reset to remote state: {resetError}");
+        }
+
         return repoPath;
     }
 

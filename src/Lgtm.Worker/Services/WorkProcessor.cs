@@ -181,7 +181,7 @@ public class WorkProcessor : IWorkProcessor
                         }
                     }
 
-                    var repoPath = await _gitHubClient.EnsureRepoCheckedOutAsync(owner, repoName, prNumber, cancellationToken);
+                    var repoPath = await _gitHubClient.EnsureRepoCheckedOutAsync(owner, repoName, prNumber, status.HeadRefName, cancellationToken);
                     if (repoPath is null)
                     {
                         Console.WriteLine("Failed to clone/checkout repository, skipping");

@@ -13,9 +13,10 @@ public interface IGitHubClient
     /// <param name="owner">The repository owner.</param>
     /// <param name="repoName">The repository name.</param>
     /// <param name="prNumber">The pull request number.</param>
+    /// <param name="headRefName">The PR branch name (used to reset to remote state).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The path to the repository on the local filesystem, or null if the operation failed.</returns>
-    Task<string?> EnsureRepoCheckedOutAsync(string owner, string repoName, int prNumber, CancellationToken cancellationToken);
+    Task<string?> EnsureRepoCheckedOutAsync(string owner, string repoName, int prNumber, string headRefName, CancellationToken cancellationToken);
 
     /// <summary>
     /// Retrieves the status of a GitHub Pull Request.
