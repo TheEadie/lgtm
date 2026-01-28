@@ -152,7 +152,10 @@ public class LessonStore : ILessonStore
 
             var comments = await _gitHubClient.GetAllReviewCommentsAsync(owner, repo, pr.Number, cancellationToken);
 
-            foreach (var comment in comments)
+            // Filter to thread roots only - replies should not generate separate lessons
+            var threadRoots = comments.Where(c => c.InReplyToId is null).ToList();
+
+            foreach (var comment in threadRoots)
             {
                 // Skip self-comments (comments by the PR author)
                 if (string.Equals(comment.Author, pr.Author, StringComparison.OrdinalIgnoreCase))

@@ -26,7 +26,8 @@ public class LessonExtractorTests
             Path: "src/Example.cs",
             Line: 42,
             Body: "Use await using here",
-            CreatedAt: DateTimeOffset.Now);
+            CreatedAt: DateTimeOffset.Now,
+            InReplyToId: null);
 
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("Always use await using for disposables");
@@ -53,7 +54,8 @@ public class LessonExtractorTests
             Path: "src/Example.cs",
             Line: 42,
             Body: "Use await using here",
-            CreatedAt: DateTimeOffset.Now);
+            CreatedAt: DateTimeOffset.Now,
+            InReplyToId: null);
 
         var expectedLesson = "Always use await using for disposables";
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -76,7 +78,8 @@ public class LessonExtractorTests
             Path: "src/Example.cs",
             Line: 42,
             Body: "Use await using here",
-            CreatedAt: DateTimeOffset.Now);
+            CreatedAt: DateTimeOffset.Now,
+            InReplyToId: null);
 
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Claude failed"));
@@ -98,7 +101,8 @@ public class LessonExtractorTests
             Path: "src/Example.cs",
             Line: 42,
             Body: "Use await using here",
-            CreatedAt: DateTimeOffset.Now);
+            CreatedAt: DateTimeOffset.Now,
+            InReplyToId: null);
 
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("   ");
@@ -120,7 +124,8 @@ public class LessonExtractorTests
             Path: "src/Example.cs",
             Line: null,
             Body: "This file needs refactoring",
-            CreatedAt: DateTimeOffset.Now);
+            CreatedAt: DateTimeOffset.Now,
+            InReplyToId: null);
 
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("Consider refactoring large files");
@@ -144,7 +149,8 @@ public class LessonExtractorTests
             Path: "",
             Line: null,
             Body: "Overall good work",
-            CreatedAt: DateTimeOffset.Now);
+            CreatedAt: DateTimeOffset.Now,
+            InReplyToId: null);
 
         _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("Keep up the good practices");

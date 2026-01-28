@@ -275,7 +275,12 @@ public class GitHubClient : IGitHubClient
 
                 var body = comment.GetProperty("body").GetString() ?? "";
 
-                comments.Add(new ReviewComment(id, author, path, line, body, createdAt));
+                long? inReplyToId = comment.TryGetProperty("in_reply_to_id", out var inReplyToElement)
+                    && inReplyToElement.ValueKind == JsonValueKind.Number
+                    ? inReplyToElement.GetInt64()
+                    : null;
+
+                comments.Add(new ReviewComment(id, author, path, line, body, createdAt, inReplyToId));
             }
         }
         catch (JsonException ex)
@@ -377,7 +382,12 @@ public class GitHubClient : IGitHubClient
 
                 var body = comment.GetProperty("body").GetString() ?? "";
 
-                comments.Add(new ReviewComment(id, author, path, line, body, createdAt));
+                long? inReplyToId = comment.TryGetProperty("in_reply_to_id", out var inReplyToElement)
+                    && inReplyToElement.ValueKind == JsonValueKind.Number
+                    ? inReplyToElement.GetInt64()
+                    : null;
+
+                comments.Add(new ReviewComment(id, author, path, line, body, createdAt, inReplyToId));
             }
         }
         catch (JsonException ex)

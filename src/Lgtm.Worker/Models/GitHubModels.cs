@@ -49,13 +49,15 @@ public record PrReview(
 /// <param name="Line">The line number the comment refers to, if applicable.</param>
 /// <param name="Body">The comment body text.</param>
 /// <param name="CreatedAt">The date/time when the comment was created.</param>
+/// <param name="InReplyToId">The ID of the parent comment if this is a reply in a thread, null for thread roots.</param>
 public record ReviewComment(
     long Id,
     string Author,
     string Path,
     int? Line,
     string Body,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    long? InReplyToId);
 
 /// <summary>
 /// Represents basic information about an open Pull Request.

@@ -18,7 +18,7 @@ public class ResolutionPromptBuilderTests
         // Arrange
         var comments = new List<ReviewComment>
         {
-            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now)
+            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now, InReplyToId: null)
         };
         var lessons = "## Code Style\n\n- Use async/await";
 
@@ -38,7 +38,7 @@ public class ResolutionPromptBuilderTests
         // Arrange
         var comments = new List<ReviewComment>
         {
-            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now)
+            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now, InReplyToId: null)
         };
 
         // Act
@@ -55,7 +55,7 @@ public class ResolutionPromptBuilderTests
         // Arrange
         var comments = new List<ReviewComment>
         {
-            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now)
+            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now, InReplyToId: null)
         };
 
         // Act
@@ -71,7 +71,7 @@ public class ResolutionPromptBuilderTests
         // Arrange
         var comments = new List<ReviewComment>
         {
-            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now)
+            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now, InReplyToId: null)
         };
 
         // Act
@@ -87,7 +87,7 @@ public class ResolutionPromptBuilderTests
         // Arrange
         var comments = new List<ReviewComment>
         {
-            new(Id: 1, Author: "reviewer", Path: "src/test.cs", Line: 42, Body: "Please fix this bug", CreatedAt: DateTimeOffset.Now)
+            new(Id: 1, Author: "reviewer", Path: "src/test.cs", Line: 42, Body: "Please fix this bug", CreatedAt: DateTimeOffset.Now, InReplyToId: null)
         };
 
         // Act
@@ -105,7 +105,7 @@ public class ResolutionPromptBuilderTests
         // Arrange
         var comments = new List<ReviewComment>
         {
-            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now)
+            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now, InReplyToId: null)
         };
 
         // Act
@@ -122,7 +122,7 @@ public class ResolutionPromptBuilderTests
         // Arrange
         var comments = new List<ReviewComment>
         {
-            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now)
+            new(Id: 1, Author: "reviewer", Path: "test.cs", Line: 10, Body: "Fix this", CreatedAt: DateTimeOffset.Now, InReplyToId: null)
         };
         var lessons = "## Code Style\n\n- Important lesson";
 

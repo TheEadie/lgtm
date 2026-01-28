@@ -132,6 +132,7 @@ public class WorkProcessor : IWorkProcessor
                     bool shouldResolveConflicts = hasConflicts && _stateTracker.ShouldResolveConflicts(prUrl, fingerprint);
                     bool shouldAddressReviews = false;
                     List<ReviewComment>? newComments = null;
+                    List<ReviewComment>? allFetchedComments = null;
 
                     if (!hasConflicts)
                     {
@@ -147,7 +148,10 @@ public class WorkProcessor : IWorkProcessor
                             // Get comments after the last addressed comment ID
                             var lastAddressedId = _stateTracker.GetLastAddressedCommentId(prUrl);
                             Console.WriteLine($"Checking for new review comments (after ID {lastAddressedId?.ToString() ?? "none"})...");
-                            newComments = await _gitHubClient.GetReviewCommentsAfterIdAsync(owner, repoName, prNumber, lastAddressedId, cancellationToken);
+                            allFetchedComments = await _gitHubClient.GetReviewCommentsAfterIdAsync(owner, repoName, prNumber, lastAddressedId, cancellationToken);
+
+                            // Filter to thread roots only - replies in a thread should not trigger new actions
+                            newComments = allFetchedComments.Where(c => c.InReplyToId is null).ToList();
 
                             if (newComments.Count > 0)
                             {
@@ -224,8 +228,8 @@ public class WorkProcessor : IWorkProcessor
                     // Convert PR to draft so user can review changes before notifying reviewers
                     await _gitHubClient.ConvertToDraftAsync(owner, repoName, prNumber, cancellationToken);
 
-                    // Record successful review resolution with the max comment ID we addressed
-                    var maxCommentId = newComments.Max(c => c.Id);
+                    // Record successful review resolution with the max comment ID we saw (including replies, to avoid re-processing them)
+                    var maxCommentId = allFetchedComments!.Max(c => c.Id);
                     _stateTracker.RecordReviewResolution(prUrl, fingerprint, maxCommentId);
                     stateModified = true;
                     await _notificationService.NotifyReviewsAddressedAsync(prUrl, newComments.Count, cancellationToken);
