@@ -155,7 +155,32 @@ public class WorkProcessor : IWorkProcessor
 
                             if (newComments.Count > 0)
                             {
+                                // Filter out comments from resolved or outdated threads
+                                var excludedIds = await _gitHubClient.GetResolvedOrOutdatedThreadRootIdsAsync(
+                                    owner, repoName, prNumber, cancellationToken);
+
+                                if (excludedIds.Count > 0)
+                                {
+                                    var beforeCount = newComments.Count;
+                                    newComments = newComments.Where(c => !excludedIds.Contains(c.Id)).ToList();
+                                    var filteredCount = beforeCount - newComments.Count;
+                                    if (filteredCount > 0)
+                                        Console.WriteLine($"Filtered out {filteredCount} resolved/outdated review comment(s)");
+                                }
+                            }
+
+                            if (newComments.Count > 0)
+                            {
                                 shouldAddressReviews = true;
+                            }
+                            else if (allFetchedComments.Count > 0)
+                            {
+                                // All new comments were filtered out (resolved/outdated/replies) -
+                                // advance the watermark to prevent re-checking every poll cycle
+                                var watermarkId = allFetchedComments.Max(c => c.Id);
+                                Console.WriteLine($"All new comments are resolved/outdated, advancing watermark to {watermarkId}");
+                                _stateTracker.RecordReviewResolution(prUrl, fingerprint, watermarkId);
+                                stateModified = true;
                             }
                             else
                             {

@@ -92,6 +92,17 @@ public interface IGitHubClient
     Task<List<PrListItem>> GetRecentPrsAsync(string owner, string repo, int limit, string? authorFilter, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Gets the set of root comment database IDs belonging to resolved or outdated review threads.
+    /// </summary>
+    /// <param name="owner">The repository owner.</param>
+    /// <param name="repo">The repository name.</param>
+    /// <param name="prNumber">The pull request number.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A set of root comment IDs from resolved or outdated threads. Returns empty set on failure (fail-open).</returns>
+    Task<HashSet<long>> GetResolvedOrOutdatedThreadRootIdsAsync(
+        string owner, string repo, int prNumber, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Gets all review comments from a Pull Request.
     /// </summary>
     /// <param name="owner">The repository owner.</param>

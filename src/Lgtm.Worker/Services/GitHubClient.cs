@@ -552,6 +552,80 @@ public class GitHubClient : IGitHubClient
     }
 
     /// <inheritdoc/>
+    public async Task<HashSet<long>> GetResolvedOrOutdatedThreadRootIdsAsync(
+        string owner, string repo, int prNumber, CancellationToken cancellationToken)
+    {
+        var excludedIds = new HashSet<long>();
+
+        // GraphQL query to fetch review thread statuses with pagination.
+        // Compact single-line format avoids argument escaping issues.
+        const string query = "query($owner: String!, $repo: String!, $prNumber: Int!, $endCursor: String) { repository(owner: $owner, name: $repo) { pullRequest(number: $prNumber) { reviewThreads(first: 100, after: $endCursor) { pageInfo { hasNextPage endCursor } nodes { isResolved isOutdated comments(first: 1) { nodes { databaseId } } } } } } }";
+
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = $"api graphql --paginate --slurp -F owner={owner} -F repo={repo} -F prNumber={prNumber} -f query=\"{query}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+
+        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0)
+        {
+            Console.WriteLine($"Warning: GraphQL query for review threads failed (fail-open): {error}");
+            return excludedIds;
+        }
+
+        try
+        {
+            // --slurp wraps paginated responses in a JSON array
+            using var doc = JsonDocument.Parse(output);
+            foreach (var page in doc.RootElement.EnumerateArray())
+            {
+                var threads = page
+                    .GetProperty("data")
+                    .GetProperty("repository")
+                    .GetProperty("pullRequest")
+                    .GetProperty("reviewThreads")
+                    .GetProperty("nodes");
+
+                foreach (var thread in threads.EnumerateArray())
+                {
+                    var isResolved = thread.GetProperty("isResolved").GetBoolean();
+                    var isOutdated = thread.GetProperty("isOutdated").GetBoolean();
+
+                    if (!isResolved && !isOutdated)
+                        continue;
+
+                    var comments = thread.GetProperty("comments").GetProperty("nodes");
+                    if (comments.GetArrayLength() > 0)
+                    {
+                        var databaseId = comments[0].GetProperty("databaseId").GetInt64();
+                        excludedIds.Add(databaseId);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Failed to parse review thread data (fail-open): {ex.Message}");
+            return new HashSet<long>();
+        }
+
+        return excludedIds;
+    }
+
+    /// <inheritdoc/>
     public Task<List<ReviewComment>> GetAllReviewCommentsAsync(
         string owner, string repo, int prNumber, CancellationToken cancellationToken)
     {
