@@ -82,7 +82,16 @@ public class ClaudeInteractor : IClaudeInteractor
             throw new InvalidOperationException($"Claude CLI exited with code {process.ExitCode}: {error}");
         }
 
-        return output.Trim();
+        var trimmedOutput = output.Trim();
+
+        // Detect cases where Claude hit the max turns limit - the CLI exits 0 but
+        // outputs an error message instead of the actual completion.
+        if (trimmedOutput.StartsWith("Error:", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Claude CLI returned an error: {trimmedOutput}");
+        }
+
+        return trimmedOutput;
     }
 
     private static void ProcessStreamEvent(string json)

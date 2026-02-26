@@ -48,6 +48,13 @@ public class LessonStore : ILessonStore
             updatedContent = await ConsolidateLessonsAsync(existingContent, newLesson, cancellationToken);
         }
 
+        // Guard against writing error messages or empty content over existing lessons
+        if (!string.IsNullOrEmpty(existingContent) && !IsValidLessonsContent(updatedContent))
+        {
+            Console.WriteLine($"Warning: Refusing to overwrite lessons file with invalid content: {(updatedContent.Length > 100 ? updatedContent[..100] + "..." : updatedContent)}");
+            return;
+        }
+
         // Ensure directory exists
         var directory = Path.GetDirectoryName(filePath);
         if (!string.IsNullOrEmpty(directory))
@@ -172,6 +179,15 @@ public class LessonStore : ILessonStore
 
         Console.WriteLine(); // New line after progress
         Console.WriteLine($"Initialization complete: extracted {lessonsExtracted} lessons from {prsProcessed} PRs");
+    }
+
+    private static bool IsValidLessonsContent(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return false;
+
+        // Must look like markdown with a heading - not an error message
+        return content.Contains('#') && !content.StartsWith("Error:", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetLessonsFilePath(string owner, string repo)

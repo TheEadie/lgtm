@@ -208,4 +208,48 @@ public class LessonStoreTests : IDisposable
         var actualContent = await File.ReadAllTextAsync(filePath);
         Assert.Equal(existingContent, actualContent);
     }
+
+    [Fact]
+    public async Task SaveLessonAsync_RefusesToOverwrite_WhenConsolidationReturnsInvalidContent()
+    {
+        // Arrange - simulate Claude returning an error string instead of markdown
+        var lessonsDir = Path.Combine(_tempDir, "lgtm", "lessons", "owner");
+        Directory.CreateDirectory(lessonsDir);
+        var filePath = Path.Combine(lessonsDir, "repo.md");
+        var existingContent = "# Lessons for owner/repo\n\n## Code Style\n\n- Existing lesson";
+        await File.WriteAllTextAsync(filePath, existingContent);
+
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
+        _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns("Error: Reached max turns (1)");
+
+        // Act
+        await sut.SaveLessonAsync("owner", "repo", "New lesson", CancellationToken.None);
+
+        // Assert - existing content should be preserved
+        var actualContent = await File.ReadAllTextAsync(filePath);
+        Assert.Equal(existingContent, actualContent);
+    }
+
+    [Fact]
+    public async Task SaveLessonAsync_RefusesToOverwrite_WhenConsolidationReturnsNoMarkdown()
+    {
+        // Arrange - simulate Claude returning plain text without any markdown headings
+        var lessonsDir = Path.Combine(_tempDir, "lgtm", "lessons", "owner");
+        Directory.CreateDirectory(lessonsDir);
+        var filePath = Path.Combine(lessonsDir, "repo.md");
+        var existingContent = "# Lessons for owner/repo\n\n## Code Style\n\n- Existing lesson";
+        await File.WriteAllTextAsync(filePath, existingContent);
+
+        var sut = new LessonStore(_claudeInteractor, _gitHubClient, _lessonExtractor);
+        _claudeInteractor.GetCompletionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns("Some random non-markdown response");
+
+        // Act
+        await sut.SaveLessonAsync("owner", "repo", "New lesson", CancellationToken.None);
+
+        // Assert - existing content should be preserved
+        var actualContent = await File.ReadAllTextAsync(filePath);
+        Assert.Equal(existingContent, actualContent);
+    }
 }
